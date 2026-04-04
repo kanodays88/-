@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kanodays88.skytakeoutai.mapper.OrderDetailMapper">
+
+    <resultMap id="BaseResultMap" type="com.kanodays88.skytakeoutai.entity.OrderDetail">
+            <id property="id" column="id" />
+            <result property="name" column="name" />
+            <result property="image" column="image" />
+            <result property="orderId" column="order_id" />
+            <result property="dishId" column="dish_id" />
+            <result property="setmealId" column="setmeal_id" />
+            <result property="dishFlavor" column="dish_flavor" />
+            <result property="number" column="number" />
+            <result property="amount" column="amount" />
+            <result property="deleteId" column="delete_id" />
+            <result property="version" column="version" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,name,image,order_id,dish_id,setmeal_id,
+        dish_flavor,number,amount,delete_id,version
+    </sql>
+</mapper>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kanodays88.skytakeoutai.mapper.SetmealDishMapper">
+
+    <resultMap id="BaseResultMap" type="com.kanodays88.skytakeoutai.entity.SetmealDish">
+            <id property="id" column="id" />
+            <result property="setmealId" column="setmeal_id" />
+            <result property="dishId" column="dish_id" />
+            <result property="name" column="name" />
+            <result property="price" column="price" />
+            <result property="copies" column="copies" />
+            <result property="deleteId" column="delete_id" />
+            <result property="version" column="version" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,setmeal_id,dish_id,name,price,copies,
+        delete_id,version
+    </sql>
+</mapper>

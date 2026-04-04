@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: sky-take-out-AI
+
+  ai:
+    openai:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: sk-91f4a584ecdd477fadb0a8d4de92b124
+      chat:
+        options:
+          model: qwen-max-latest
+      embedding:
+        options:
+          model: text-embedding-v3  #向量模型
+          dimensions: 1024   #向量维数
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://192.168.74.100:3306/sky_take_out?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true
+    username: root
+    password: zhangboji88
+
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor: debug  #为springai下的环绕增强开启日志
+    com.kanodays88.ai: debug  #为该包下的类开启日志
