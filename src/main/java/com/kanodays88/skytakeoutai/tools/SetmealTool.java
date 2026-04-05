@@ -35,8 +35,10 @@ public class SetmealTool {
         QueryChainWrapper<Setmeal> query = setmealServiceImpl.query();
         if(setmealQuery.getCategory()!=null && !setmealQuery.getCategory().isEmpty()){
             List<Category> categories = categoryServiceImpl.query().select("id").in("name", setmealQuery.getCategory()).list();
-            List<Long> categories_id = categories.stream().map(c -> c.getId()).toList();
-            query.in("category_id",categories_id);
+            if(categories!=null && !categories.isEmpty()){
+                List<Long> categories_id = categories.stream().map(c -> c.getId()).toList();
+                query.in("category_id",categories_id);
+            }
         }
         if(setmealQuery.getDishNames() != null && !setmealQuery.getDishNames().isEmpty()){
             // 1. 构建查询条件：in 查询 + 去重 DISTINCT

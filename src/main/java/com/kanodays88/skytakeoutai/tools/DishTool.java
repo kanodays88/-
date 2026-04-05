@@ -31,8 +31,10 @@ public class DishTool {
         }
         if(dishQuery.getCategory()!=null && !dishQuery.getCategory().isEmpty()){
             List<Category> categories = categoryServiceImpl.query().select("id").in("name", dishQuery.getCategory()).list();
-            List<Long> categories_id = categories.stream().map(c -> c.getId()).toList();
-            query.in("category_id",categories_id);
+            if(categories!=null && !categories.isEmpty()){
+                List<Long> categories_id = categories.stream().map(c -> c.getId()).toList();
+                query.in("category_id",categories_id);
+            }
         }
         if(dishQuery.getMinPrice() != null){
             query.ge("price",dishQuery.getMinPrice());
@@ -46,9 +48,5 @@ public class DishTool {
 
         return list;
     }
-
-
-
-
 
 }

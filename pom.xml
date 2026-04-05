@@ -55,9 +55,15 @@
             <artifactId>spring-ai-advisors-vector-store</artifactId>
             <version>${spring-ai.version}</version>
         </dependency>
+<!--        redis依赖-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+<!--        redis连接池-->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
 
         <!--hutool  更易用的 Bean 操作 API-->

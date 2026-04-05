@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class CommonUtils {
@@ -45,6 +46,7 @@ public class CommonUtils {
         }
 
         else{
+            stringRedisTemplate.expire(prefix+chatId,30,TimeUnit.MINUTES);
             RAG rag = JSONUtil.toBean(json, RAG.class);
             return rag.questionStatic == true?true:false;
         }
@@ -61,7 +63,7 @@ public class CommonUtils {
         rag.setInitialQuestion(initialQuestion);
         rag.setQuestionStatic(questionStatic);
         String jsonStr = JSONUtil.toJsonStr(rag);
-        stringRedisTemplate.opsForValue().set(key,jsonStr);
+        stringRedisTemplate.opsForValue().set(key,jsonStr,30, TimeUnit.MINUTES);
     }
 
 

@@ -9,10 +9,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
@@ -22,6 +19,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/ai/chat")
+@CrossOrigin
 public class ChatController {
 
     @Autowired
@@ -79,6 +77,22 @@ public class ChatController {
                     """.formatted(ChatSystem.CHAT_SYSTEM,context);
 
             return chatClient.prompt(msg).system(defaultSystem).stream().content();
+        }
+    }
+
+    @RequestMapping("/finish")
+    public void finishRag(@RequestBody Map<String,String> map ,@RequestHeader("chatId") String chatId){
+        String msg = map.get("msg");
+        boolean b = commonUtils.writeChatCache(CHAT_RAG_STATIC, chatId, msg);
+        if(b == true){
+            //获取原始问题
+            String s = commonUtils.getChatCache(CHAT_RAG_STATIC + chatId);
+            boolean end = chatDecide.chatDecideRAGEnd(s, msg);
+
+            if(end == true){
+                //结束RAG锁
+                commonUtils.setChatCache(CHAT_RAG_STATIC+chatId,"",false);
+            }
         }
     }
 }
