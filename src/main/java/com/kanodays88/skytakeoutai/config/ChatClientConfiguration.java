@@ -3,6 +3,7 @@ package com.kanodays88.skytakeoutai.config;
 
 import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.tools.DishTool;
+import com.kanodays88.skytakeoutai.tools.OrderTool;
 import com.kanodays88.skytakeoutai.tools.SetmealTool;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -27,11 +28,11 @@ public class ChatClientConfiguration {
      * @return
      */
     @Bean
-    public ChatClient chatClient(OpenAiChatModel model, ChatMemory chatMemory, DishTool dishTool, SetmealTool setmealTool){
+    public ChatClient chatClient(OpenAiChatModel model, ChatMemory chatMemory, DishTool dishTool, SetmealTool setmealTool, OrderTool orderTool){
 
         return ChatClient.builder(model)
                 .defaultSystem(ChatSystem.CHAT_SYSTEM)//设置系统角色
-                .defaultTools(dishTool,setmealTool)//添加工具
+                .defaultTools(dishTool,setmealTool,orderTool)//添加工具
                 .defaultAdvisors(SimpleLoggerAdvisor.builder().build(),//设置切面环绕增强,输出日志
                         MessageChatMemoryAdvisor.builder(chatMemory).build())//记忆化环绕增强，本质就是把之前的会话记录通过aop添加进去
                 .build();
