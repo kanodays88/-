@@ -54,8 +54,6 @@ public class OrderTool {
         orders.setAddressBookId(-1L);
 
 
-
-
         //遍历菜品和套餐，获取总额
         BigDecimal amount = BigDecimal.valueOf(0);
         if(orderQuery.getDishesName() != null && !orderQuery.getDishesName().isEmpty()){
@@ -92,6 +90,7 @@ public class OrderTool {
                 orderDetail.setDishId(0L);
                 orderDetail.setSetmealId(-1L);
                 orderDetail.setNumber(orderQuery.getDishesNumber().get(d));
+                orderDetail.setImage(orderQuery.getDishesImage().get(d));
 
                 BigDecimal bigDecimal = orderQuery.getDishesPrice().get(d);
                 Integer number = orderQuery.getDishesNumber().get(d);
@@ -113,6 +112,7 @@ public class OrderTool {
                 orderDetail.setDishId(-1L);
                 orderDetail.setSetmealId(0L);
                 orderDetail.setNumber(orderQuery.getSetmealsNumber().get(s));
+                orderDetail.setImage(orderQuery.getSetmealsImage().get(s));
 
                 BigDecimal bigDecimal = orderQuery.getSetmealsPrice().get(s);
                 Integer number = orderQuery.getSetmealsNumber().get(s);
@@ -132,6 +132,8 @@ public class OrderTool {
         BeanUtil.copyProperties(orders,orderVO);
         orderVO.setDishes(orderQuery.getDishesNumber());
         orderVO.setSetmeals(orderQuery.getSetmealsNumber());
+        orderVO.setDishesImage(orderQuery.getDishesImage());
+        orderVO.setSetmealsImage(orderQuery.getSetmealsImage());
 
         return orderVO;
 
@@ -148,19 +150,25 @@ public class OrderTool {
             List<OrderDetail> orderDetails = orderDetailServiceImpl.query().eq("order_id", o.getId()).list();
             Map<String,Integer> dishesNumber = new HashMap<>();
             Map<String,Integer> setmealsNumber = new HashMap<>();
+            Map<String,String> dishesImage = new HashMap<>();
+            Map<String,String> setmealsImage = new HashMap<>();
 
             for(OrderDetail od:orderDetails){
                 if(od.getDishId() == 0L){
                     dishesNumber.put(od.getName(),od.getNumber());
+                    dishesImage.put(od.getName(),od.getImage());
                 }
                 else if(od.getSetmealId() == 0L){
                     setmealsNumber.put(od.getName(),od.getNumber());
+                    setmealsImage.put(od.getName(),od.getImage());
                 }
             }
             OrderVO orderVO = new OrderVO();
             BeanUtil.copyProperties(o,orderVO);
             orderVO.setDishes(dishesNumber);
             orderVO.setSetmeals(setmealsNumber);
+            orderVO.setDishesImage(dishesImage);
+            orderVO.setSetmealsImage(setmealsImage);
 
             orderVOS.add(orderVO);
         }
@@ -188,17 +196,23 @@ public class OrderTool {
 
         Map<String,Integer> dishesNumber = new HashMap<>();
         Map<String,Integer> setmealsNumber = new HashMap<>();
+        Map<String,String> dishesImage = new HashMap<>();
+        Map<String,String> setmealsImage = new HashMap<>();
 
         for(OrderDetail od:orderDetails){
             if(od.getDishId() == 0L){
                 dishesNumber.put(od.getName(),od.getNumber());
+                dishesImage.put(od.getName(),od.getImage());
             }
             else if(od.getSetmealId() == 0L){
                 setmealsNumber.put(od.getName(),od.getNumber());
+                setmealsImage.put(od.getName(),od.getImage());
             }
         }
         orderVO.setDishes(dishesNumber);
         orderVO.setSetmeals(setmealsNumber);
+        orderVO.setDishesImage(dishesImage);
+        orderVO.setSetmealsImage(setmealsImage);
 
         return orderVO;
 

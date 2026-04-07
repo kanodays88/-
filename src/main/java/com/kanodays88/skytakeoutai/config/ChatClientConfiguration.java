@@ -39,23 +39,4 @@ public class ChatClientConfiguration {
     }
 
 
-    @Bean
-    public ChatClient chatClientRAG(OpenAiChatModel model, ChatMemory chatMemory, DishTool dishTool, SetmealTool setmealTool, VectorStore vectorStore){
-
-        return ChatClient.builder(model)
-                .defaultSystem(ChatSystem.CHAT_SYSTEM)//设置系统角色
-                .defaultTools(dishTool,setmealTool)//添加工具
-                .defaultAdvisors(SimpleLoggerAdvisor.builder().build(),//设置切面环绕增强,输出日志
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        QuestionAnswerAdvisor.builder(vectorStore).//创建回答问题助理，构建时传入向量数据库
-                                searchRequest(SearchRequest.builder().//配置搜索请求
-//                                        query("论语").
-//                                        filterExpression("file_name == '中二知识笔记.pdf'").
-                                        topK(2).//只搜索最相关的两个
-//                                        similarityThreshold(0.5).//只返回相关度大于0.6的向量
-                                        build()).
-                                build())//记忆化环绕增强，本质就是把之前的会话记录通过aop添加进去)//记忆化环绕增强，本质就是把之前的会话记录通过aop添加进去
-                .build();
-    }
-
 }

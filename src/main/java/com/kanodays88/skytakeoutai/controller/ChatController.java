@@ -26,9 +26,6 @@ public class ChatController {
     private ChatClient chatClient;
 
     @Autowired
-    private ChatClient chatClientRAG;
-
-    @Autowired
     private ChatDecide chatDecide;
 
     @Autowired

@@ -31,8 +31,12 @@ public class OrderVO {
 
     //订单菜品，以及份数
     private Map<String,Integer> dishes;
+    //订单菜品对应图片链接
+    private Map<String,String> dishesImage;
 
     //订单套餐，以及份数
     private Map<String,Integer> setmeals;
+    //订单套餐对应的图片链接
+    private Map<String,String> setmealsImage;
 
 }

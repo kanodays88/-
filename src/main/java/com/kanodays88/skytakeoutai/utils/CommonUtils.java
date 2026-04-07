@@ -30,6 +30,7 @@ public class CommonUtils {
 
     private static final String CHAT_RAG_STATIC = "chat:ragStatic:";
 
+    //RAG锁/////////////////////////////////////////////////////////////////////
     @Data
     private class RAG{
         boolean questionStatic; //RAG问题解决状态
@@ -65,6 +66,8 @@ public class CommonUtils {
         String jsonStr = JSONUtil.toJsonStr(rag);
         stringRedisTemplate.opsForValue().set(key,jsonStr,30, TimeUnit.MINUTES);
     }
+
+    /// ///////////////////////////////////////////////////////////////////
 
 
     @PostConstruct

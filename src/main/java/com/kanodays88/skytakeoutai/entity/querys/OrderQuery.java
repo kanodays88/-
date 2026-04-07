@@ -28,6 +28,12 @@ public class OrderQuery {
     @ToolParam(required = false,description = "订单所含套餐的名称,和其对应的数量")
     private Map<String,Integer> setmealsNumber;
 
+    @ToolParam(required = false,description = "订单所含菜品的名称,和其图片的链接")
+    private Map<String,String> dishesImage;
+
+    @ToolParam(required = false,description = "订单所含套餐的名称,和其图片的链接")
+    private Map<String,String> setmealsImage;
+
     @ToolParam(required = true,description = "订单的配送地址")
     private String address;
 

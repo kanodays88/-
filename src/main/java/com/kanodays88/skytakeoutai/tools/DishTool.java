@@ -1,10 +1,12 @@
 package com.kanodays88.skytakeoutai.tools;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.kanodays88.skytakeoutai.entity.Category;
 import com.kanodays88.skytakeoutai.entity.Dish;
 import com.kanodays88.skytakeoutai.entity.querys.DishQuery;
+import com.kanodays88.skytakeoutai.entity.vo.DishVO;
 import com.kanodays88.skytakeoutai.service.CategoryService;
 import com.kanodays88.skytakeoutai.service.DishService;
 import org.springframework.ai.tool.annotation.Tool;
@@ -12,6 +14,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -24,7 +27,7 @@ public class DishTool {
     private CategoryService categoryServiceImpl;
 
     @Tool(description = "查询菜品工具，传入的参数是查询菜品的查询条件")
-    public List<Dish> queryDish(@ToolParam(description = "查询菜品的条件") DishQuery dishQuery){
+    public List<DishVO> queryDish(@ToolParam(description = "查询菜品的条件") DishQuery dishQuery){
         QueryChainWrapper<Dish> query = dishServiceImpl.query();
         if(dishQuery.getDishNames() != null && !dishQuery.getDishNames().isEmpty()){
             query.in("name",dishQuery.getDishNames());
@@ -46,7 +49,18 @@ public class DishTool {
         //查询
         List<Dish> list = query.list();
 
-        return list;
+        List<DishVO> dishVOS = new ArrayList<>();
+
+        for(Dish d:list){
+            DishVO dishVO = new DishVO();
+            BeanUtil.copyProperties(d,dishVO);
+            List<Category> categories = categoryServiceImpl.query().select("name").eq("id", d.getCategoryId()).list();
+            List<String> categories_name = categories.stream().map(c -> c.getName()).toList();
+            dishVO.setCategoryName(categories_name.get(0));
+            dishVOS.add(dishVO);
+        }
+
+        return dishVOS;
     }
 
 }
