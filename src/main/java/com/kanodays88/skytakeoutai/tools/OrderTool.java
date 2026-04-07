@@ -2,6 +2,7 @@ package com.kanodays88.skytakeoutai.tools;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.db.sql.Order;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.kanodays88.skytakeoutai.entity.OrderDetail;
 import com.kanodays88.skytakeoutai.entity.Orders;
@@ -165,6 +166,42 @@ public class OrderTool {
         }
 
         return orderVOS;
+    }
+
+    @Tool(description = "删除订单工具,会返回删除的订单的信息")
+    @Transactional
+    public OrderVO removeOrder(@ToolParam(description = "删除订单对应的订单号") String orderNumber){
+        List<Orders> orders = ordersServiceImpl.query().eq("number", orderNumber).list();
+
+        Long orderId = orders.get(0).getId();
+        LambdaUpdateWrapper<OrderDetail> wrapper = new LambdaUpdateWrapper<>();
+        List<OrderDetail> orderDetails = orderDetailServiceImpl.query().eq("order_id", orderId).list();
+        int rows = orderDetailMapper.delete(wrapper.eq(OrderDetail::getOrderId, orderId));
+        if(rows <= 0) throw new RuntimeException("删除订单详细项失败");
+
+        LambdaUpdateWrapper<Orders> wrapper1 = new LambdaUpdateWrapper<>();
+        rows = ordersMapper.delete(wrapper1.eq(Orders::getNumber,orderNumber));
+        if(rows <= 0) throw new RuntimeException("删除订单失败");
+
+        OrderVO orderVO = new OrderVO();
+        BeanUtil.copyProperties(orders.get(0),orderVO);
+
+        Map<String,Integer> dishesNumber = new HashMap<>();
+        Map<String,Integer> setmealsNumber = new HashMap<>();
+
+        for(OrderDetail od:orderDetails){
+            if(od.getDishId() == 0L){
+                dishesNumber.put(od.getName(),od.getNumber());
+            }
+            else if(od.getSetmealId() == 0L){
+                setmealsNumber.put(od.getName(),od.getNumber());
+            }
+        }
+        orderVO.setDishes(dishesNumber);
+        orderVO.setSetmeals(setmealsNumber);
+
+        return orderVO;
+
     }
 
 
