@@ -18,4 +18,6 @@ public class SetmealQuery {
     private BigDecimal maxPrice;
     @ToolParam(required = false,description = "多个菜品的名称")
     private List<String> dishNames;
+    @ToolParam(required = false,description = "套餐名称,当用户指定套餐名称时才会使用")
+    private List<String> setmealNames;
 }

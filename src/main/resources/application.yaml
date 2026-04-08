@@ -21,7 +21,7 @@ spring:
       api-key: sk-91f4a584ecdd477fadb0a8d4de92b124
       chat:
         options:
-          model: qwen-max-latest
+          model: qwen-max
       embedding:
         options:
           model: text-embedding-v3  #向量模型

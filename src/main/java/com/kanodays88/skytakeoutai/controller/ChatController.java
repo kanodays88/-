@@ -55,7 +55,7 @@ public class ChatController {
                 commonUtils.setChatCache(CHAT_RAG_STATIC+chatId,msg,true);
             }
             SearchRequest searchRequest = SearchRequest.builder()
-                    .query(msg) //搜索文本
+                    .query("初始问题："+commonUtils.getChatCache(CHAT_RAG_STATIC+chatId)+";当前问题："+msg) //搜索文本
                     .topK(2) //只返回最相关的前2个向量数据
                     //            .filterExpression("file_name == '菜品口味表.pdf'") //元数据过滤，只搜索指定文件的数据
                     .build();

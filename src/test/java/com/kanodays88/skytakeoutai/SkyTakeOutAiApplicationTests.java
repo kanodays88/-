@@ -3,6 +3,7 @@ package com.kanodays88.skytakeoutai;
 import com.kanodays88.skytakeoutai.entity.Dish;
 import com.kanodays88.skytakeoutai.entity.querys.DishQuery;
 import com.kanodays88.skytakeoutai.entity.querys.OrderQuery;
+import com.kanodays88.skytakeoutai.entity.querys.SetmealQuery;
 import com.kanodays88.skytakeoutai.entity.vo.OrderVO;
 import com.kanodays88.skytakeoutai.tools.DishTool;
 import com.kanodays88.skytakeoutai.tools.OrderTool;
@@ -44,7 +45,12 @@ class SkyTakeOutAiApplicationTests {
 //        OrderVO orderVO = orderTool.makeOrder(orderQuery);
 //        System.out.println(orderVO);
 
-        List<OrderVO> orderVOS = orderTool.queryOrder("114514");
+//        List<OrderVO> orderVOS = orderTool.queryOrder("114514");
+
+        SetmealQuery setmealQuery = new SetmealQuery();
+        setmealQuery.setCategory(new ArrayList<>());
+        List<String>
+        setmealQuery.setCategory();
         System.out.println(orderVOS);
 
     }
