@@ -18,10 +18,10 @@ spring:
   ai:
     openai:
       base-url: https://dashscope.aliyuncs.com/compatible-mode
-      api-key: sk-91f4a584ecdd477fadb0a8d4de92b124
+      api-key: ${API_KEY}
       chat:
         options:
-          model: qwen-max
+          model: qwen3.5-plus
       embedding:
         options:
           model: text-embedding-v3  #向量模型
@@ -32,6 +32,23 @@ spring:
     url: jdbc:mysql://192.168.74.100:3306/sky_take_out?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true
     username: root
     password: zhangboji88
+
+# SpringDoc OpenAPI（生成 API 文档）与 Knife4j（增强 Swagger UI 界面）
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.kanodays88.kanodays88aiagent.controller
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
 
 logging:
   level:
