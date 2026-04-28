@@ -81,7 +81,7 @@ public class ToolCallAgent extends ReActAgent{
             //调用大模型，并获取返回结果
             ChatResponse chatResponse = getChatClient().prompt(prompt)
                     .system(systemPrompt.getContents())
-                    .tools(availableTools)
+                    .toolCallbacks(availableTools)
                     .call()
                     .chatResponse();
 

@@ -57,6 +57,10 @@ public class FileBasedChatMemory implements ChatMemory {
         return messages.stream().skip(Math.max(0,messages.size()-lastN)).toList();
     }
 
+    public List<Message> getAll(String conversationId){
+        return getOrCreateConversation(conversationId);
+    }
+
     @Override
     public void clear(String conversationId) {
         File file = getConversationFile(conversationId);

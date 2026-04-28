@@ -11,7 +11,7 @@ import java.util.Map;
 
 public class Kanodays88Manus extends ToolCallAgent{
 
-    public Kanodays88Manus(ToolCallback[] allTools, ChatModel dashscopeChatModel){
+    public Kanodays88Manus(ToolCallback[] allTools, ChatModel openAiChatModel){
         //父类构造函数初始化工具
         super(allTools);
         //设置智能体名字
@@ -36,7 +36,7 @@ public class Kanodays88Manus extends ToolCallAgent{
                 """;
         this.setNextStepPrompt(NEXT_STEP_PROMPT);
         //设置会话客户端
-        ChatClient chatClient = ChatClient.builder(dashscopeChatModel)
+        ChatClient chatClient = ChatClient.builder(openAiChatModel)
                 .defaultAdvisors(new MyLoggerAdvisor())
                 .build();
         this.setChatClient(chatClient);

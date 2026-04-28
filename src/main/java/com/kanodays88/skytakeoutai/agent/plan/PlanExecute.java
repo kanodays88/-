@@ -4,6 +4,7 @@ package com.kanodays88.skytakeoutai.agent.plan;
 import com.kanodays88.skytakeoutai.advisor.MyLoggerAdvisor;
 import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
+import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -12,6 +13,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -82,17 +84,19 @@ public class PlanExecute {
 
     private FileBasedChatMemory fileBasedChatMemory;
 
+    private OpenAiChatModel openAiChatModel;
+
     @Autowired
     private SSESend sseSend;
 
     @Autowired
     private ToolCallback[] allTools;
 
-    @Autowired
-    private ChatModel dashscopeChatModel;
-
-    public PlanExecute(ChatModel dashscopeChatModel){
-        this.chatClient = ChatClient.builder(dashscopeChatModel).defaultAdvisors(
+    public PlanExecute(OpenAiChatModel openAiChatModel){
+        this.openAiChatModel = openAiChatModel;
+        this.chatClient = ChatClient.builder(openAiChatModel)
+                .defaultSystem(ChatSystem.CHAT_SYSTEM)
+                .defaultAdvisors(
                 new MyLoggerAdvisor()
         ).build();
         this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
@@ -107,16 +111,16 @@ public class PlanExecute {
             List<Message> messages = fileBasedChatMemory.get(conversationId);
             fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
             //意图分析
-            sseSend.sendEvent(emitter,"开始进行意图分析...");
+            sseSend.sendEvent(emitter,"开始进行意图分析...\n");
             TaskSchema taskSchema = parseIntent(userPrompt,messages);
-            String taskSchemaMessage = "意图解析完成";
+            String taskSchemaMessage = "意图解析完成\n";
             if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
             if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
             if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
             sseSend.sendEvent(emitter,taskSchemaMessage);
 
             //对意图进行任务拆分
-            sseSend.sendEvent(emitter,"开始对任务进行拆分...");
+            sseSend.sendEvent(emitter,"开始对任务进行拆分...\n");
             DecomposedTasks decomposedTasks = decomposeTaskWithContract(taskSchema);
             List<SubTask> subTasks = decomposedTasks.subTaskList();
             String taskMessage = subTasks.stream().map(s -> {
@@ -126,7 +130,7 @@ public class PlanExecute {
 
             //对每个子任务执行，得到结果集
             List<DistilledResult> results = new ArrayList<>();
-            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(allTools, dashscopeChatModel);
+            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(allTools, openAiChatModel);
             for(SubTask task:subTasks){
                 sseSend.sendEvent(emitter,"开始执行任务【"+task.taskName()+"】\n\n");
                 //获取该任务对应所需的上游任务的结果
@@ -171,7 +175,7 @@ public class PlanExecute {
         TaskSchema taskSchema = chatClient.prompt().user(
                         u -> u.text(prompt).
                                 param("userInput", userPrompt).
-                                param("format", converter.getFormat())
+                                param("format", converter.getJsonSchema())
                                 .param("history",historyMessage))
                 .system("你是意图解析器，根据用户的要求解析意图")
                 .call()
@@ -205,7 +209,8 @@ public class PlanExecute {
                         .param("mainGoal", taskSchema.mainGoal())
                         .param("constraints", taskSchema.constraints())
                         .param("deliverables", taskSchema.deliverables())
-                        .param("format", converter.getFormat()))
+                        .param("format", converter.getJsonSchema()))
+                .toolCallbacks(allTools)
                 .call()
                 .entity(converter);
     }

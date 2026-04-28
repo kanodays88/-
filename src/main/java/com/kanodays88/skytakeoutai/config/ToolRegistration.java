@@ -24,9 +24,9 @@ public class ToolRegistration {
         OrderTool orderTool = new OrderTool();
         SetmealTool setmealTool = new SetmealTool();
         return ToolCallbacks.from(
-                dishTool,
-                orderTool,
-                setmealTool,
+//                dishTool,
+//                orderTool,
+//                setmealTool,
                 assignmentFinishTool,
                 fileOperationTool,
                 pdfGenerationTool,
