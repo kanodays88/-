@@ -20,7 +20,13 @@ public class ToolRegistration {
         PDFGenerationTool pdfGenerationTool = new PDFGenerationTool();
         ResourceDownloadTool resourceDownloadTool = new ResourceDownloadTool();
         WebScrapingTool webScrapingTool = new WebScrapingTool();
+        DishTool dishTool = new DishTool();
+        OrderTool orderTool = new OrderTool();
+        SetmealTool setmealTool = new SetmealTool();
         return ToolCallbacks.from(
+                dishTool,
+                orderTool,
+                setmealTool,
                 assignmentFinishTool,
                 fileOperationTool,
                 pdfGenerationTool,

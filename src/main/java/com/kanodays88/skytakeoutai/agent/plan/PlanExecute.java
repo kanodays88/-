@@ -265,6 +265,7 @@ public class PlanExecute {
                         .param("globalRequiredFields", globalRequiredFields)
                         .param("outputSchema", subTask.outputSchema())
                         .param("rawResult", rawResult))
+                .system("根据用户需求对任务进行蒸馏")
                 .call()
                 .content();
 
@@ -275,14 +276,13 @@ public class PlanExecute {
     private String fuseResults(TaskSchema task, List<DistilledResult> subTaskResults) {
         List<String> results = subTaskResults.stream().map(s -> s.structuredCoreResult()).collect(Collectors.toList());
         String prompt = """
-            请基于以下子任务结果，整合生成符合用户原始需求的最终交付物。
+            请基于以下子任务结果，整合成最终结果报告返回给用户
             原始核心目标: {mainGoal}
             交付要求: {deliverables}
             子任务结果列表: {subTaskResults}
             """;
 
         return chatClient.prompt()
-                .system("你是总结器")
                 .user(u -> u.text(prompt)
                         .param("mainGoal", task.mainGoal())
                         .param("deliverables", task.deliverables())

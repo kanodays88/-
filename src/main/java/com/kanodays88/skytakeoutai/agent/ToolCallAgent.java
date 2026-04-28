@@ -12,6 +12,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
@@ -40,9 +41,10 @@ public class ToolCallAgent extends ReActAgent{
         this.availableTools = toolCallbacks;
         this.toolCallingManager = ToolCallingManager.builder().build();
 
-        //TODO替换成springAi的
-        this.chatOptions = DashScopeChatOptions.builder()
-                .withProxyToolCalls(true)//springAi不会自动调用工具了
+    // 替换原DashScopeChatOptions配置，完全等价于原proxyToolCalls=true的效果
+        this.chatOptions = ToolCallingChatOptions.builder()
+                .internalToolExecutionEnabled(false) // 核心配置：禁用Spring AI内部自动工具执行
+                // 可保留原有的其他通义千问专属配置（模型名、温度、top_p等）
                 .build();
     }
 
