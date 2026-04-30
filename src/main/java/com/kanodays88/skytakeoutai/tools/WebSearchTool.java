@@ -53,30 +53,57 @@ public class WebSearchTool {
     }
 
     /**
-     * 从API响应中提取完整的references数组
+     * 从API响应中提取并过滤references数组，按需求生成新JSON
      */
     private String extractReferencesArray(String jsonResponse) throws IOException {
         JsonNode rootNode = OBJECT_MAPPER.readTree(jsonResponse);
 
+        // 校验根节点是否存在references数组
         if (rootNode.has("references") && rootNode.get("references").isArray()) {
             JsonNode referencesArray = rootNode.get("references");
             ArrayNode filteredArray = OBJECT_MAPPER.createArrayNode();
 
-            // 遍历并过滤每个引用元素
+            // 遍历每个引用元素，按需过滤
             for (JsonNode ref : referencesArray) {
-                if (ref.isObject()) {
-                    ObjectNode filteredRef = OBJECT_MAPPER.createObjectNode();
-                    // 仅保留指定字段
-                    filteredRef.set("content", ref.get("content"));
-                    filteredRef.set("image", ref.get("image"));
-                    filteredRef.set("video", ref.get("video"));
-                    filteredRef.set("date", ref.get("date"));
-                    filteredArray.add(filteredRef);
+                if (!ref.isObject()) {
+                    continue;
                 }
+                ObjectNode filteredRef = OBJECT_MAPPER.createObjectNode();
+
+                // 1. 保留需求指定的3个核心字段
+                filteredRef.set("content", ref.get("content"));
+                filteredRef.set("video", ref.get("video"));
+                filteredRef.set("date", ref.get("date"));
+
+                // 2. 构建合并后的images数组
+                ArrayNode mergedImages = OBJECT_MAPPER.createArrayNode();
+
+                // 2.1 先添加顶层image字段的内容（非空才添加）
+                JsonNode topImageNode = ref.get("image");
+                if (topImageNode != null && !topImageNode.isNull()) {
+                    mergedImages.add(topImageNode);
+                }
+
+                // 2.2 再添加web_extensions.images数组的所有元素（校验字段存在性）
+                if (ref.has("web_extensions") && ref.get("web_extensions").isObject()) {
+                    JsonNode webExtNode = ref.get("web_extensions");
+                    if (webExtNode.has("images") && webExtNode.get("images").isArray()) {
+                        JsonNode extImagesNode = webExtNode.get("images");
+                        for (JsonNode imgItem : extImagesNode) {
+                            mergedImages.add(imgItem);
+                        }
+                    }
+                }
+
+                // 3. 将合并后的images数组放入结果对象
+                filteredRef.set("images", mergedImages);
+                filteredArray.add(filteredRef);
             }
+
             return OBJECT_MAPPER.writeValueAsString(filteredArray);
         }
-        throw new IOException("响应中缺少references数组");
+
+        throw new IOException("响应中缺少合法的references数组");
     }
 }
 

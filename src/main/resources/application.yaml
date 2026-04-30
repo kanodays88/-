@@ -21,7 +21,7 @@ spring:
       api-key: ${API_KEY}
       chat:
         options:
-          model: glm-5.1
+          model: qwen-plus-2025-07-28
       embedding:
         options:
           model: text-embedding-v3  #向量模型

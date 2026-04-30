@@ -23,10 +23,12 @@ public class ToolRegistration {
         DishTool dishTool = new DishTool();
         OrderTool orderTool = new OrderTool();
         SetmealTool setmealTool = new SetmealTool();
+        TimeTool timeTool = new TimeTool();
         return ToolCallbacks.from(
 //                dishTool,
 //                orderTool,
 //                setmealTool,
+                timeTool,
                 assignmentFinishTool,
                 fileOperationTool,
                 pdfGenerationTool,

@@ -18,7 +18,7 @@ public abstract class ReActAgent extends BaseAgent{
         try{
             boolean think = think(userPrompt,taskName,sseEmitter,sseSend);
             if(!think){
-                return "思考完成-无需行动";
+                return "思考完成-无需调用工具";
             }
             return act();
         }catch (Exception e){

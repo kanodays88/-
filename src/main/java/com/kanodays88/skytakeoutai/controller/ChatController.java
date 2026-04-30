@@ -7,6 +7,7 @@ import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import com.kanodays88.skytakeoutai.utils.CommonUtils;
 import com.kanodays88.skytakeoutai.utils.FileScanUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.document.Document;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/ai/chat")
 @CrossOrigin
+@Slf4j
 public class ChatController {
 
     @Autowired
@@ -103,6 +105,18 @@ public class ChatController {
         FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
         List<Message> allMemory = fileBasedChatMemory.getAll(chatId);
         return allMemory.stream().map(m->m.getMessageType()+":"+m.getText()).collect(Collectors.toList());
+    }
+
+    @DeleteMapping("/history/remove/{chatId}")
+    public String historyRemove(@PathVariable("chatId") String chatId){
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
+        try{
+            fileBasedChatMemory.clear(chatId);
+            return "删除成功";
+        }catch (Exception e){
+            log.info("删除历史会话失败：{}；错误原因：{}",chatId,e.getMessage());
+            return "删除失败";
+        }
     }
 
 

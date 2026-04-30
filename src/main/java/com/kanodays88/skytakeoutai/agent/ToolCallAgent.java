@@ -64,18 +64,15 @@ public class ToolCallAgent extends ReActAgent{
         try {
             //更新设置系统提示词
             String SYSTEM_PROMPT = """
-                    角色：Kanodays88Manus全能AI助手
-                    ##核心规则：
-                    1.根据核心任务内容实现核心任务，不需要关注其他任务的实现情况
-                    2.当你认为任务完成或无法继续时，调用AssignmentFinishTool工具结束交互
-                    ##输入变量：
-                    {question}：核心任务
-                    {taskContent}：核心任务内容
-                    {now}：当前剩余思考次数
-                    {max}：最大可用思考次数
+                    角色：专注完成当前任务的AI助手
+                    核心规则：
+                    1. 仅使用提供的工具完成当前任务，不要多余思考
+                    2. 任务完成或无法继续时，调用assignmentFinish工具
+                    3. 当前剩余思考次数：{now} / {max}
+                    当前任务：{question}
                 """;
             PromptTemplate promptTemplate = new PromptTemplate(SYSTEM_PROMPT);
-            Prompt systemPrompt = promptTemplate.create(Map.of("now", this.getMaxSteps()-this.getCurrentStep(), "max", this.getMaxSteps(),"question",taskName,"taskContent",userPrompt));
+            Prompt systemPrompt = promptTemplate.create(Map.of("now", this.getMaxSteps()-this.getCurrentStep(), "max", this.getMaxSteps(),"question",userPrompt));
 
             log.info(systemPrompt.getContents());
             //调用大模型，并获取返回结果
@@ -89,15 +86,11 @@ public class ToolCallAgent extends ReActAgent{
             //获取大模型返回的消息
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
             //通过SseEmitter将大模型思考过程发送给用户
-            sseSend.sendEvent(sseEmitter,(String) assistantMessage.getMetadata().get("reasoningContent")+"\n");
-            //通过SseEmitter将大模型思考结果发送给用户
-            sseSend.sendEvent(sseEmitter,assistantMessage.getText()+"\n");
+            sseSend.sendEventThink(sseEmitter,(String) assistantMessage.getMetadata().get("reasoningContent"));
 
-            //大模型思考结果的输出文本
-            String result = assistantMessage.getText();
             //大模型思考结果的调用工具消息
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
-            log.info(getName() + "的思考: " + result);
+            log.info(getName() + "的思考: " + (String) assistantMessage.getMetadata().get("reasoningContent"));//获取思考过程
             log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
             //获取工具参数信息
             String toolCallInfo = toolCallList.stream()
@@ -108,7 +101,7 @@ public class ToolCallAgent extends ReActAgent{
                     .collect(Collectors.joining("\n"));//集合成字符串，用换行符分割
             log.info(toolCallInfo);
             if (toolCallList.isEmpty()) {
-                //最后将大模型的思考结果加入记忆消息队列，结束思考，选择不调用工具
+                //最后将大模型的思考加入记忆消息队列，结束思考，选择不调用工具
                 getMessageList().add(assistantMessage);
                 return false;
             } else {

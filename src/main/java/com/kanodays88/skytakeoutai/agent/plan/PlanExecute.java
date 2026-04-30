@@ -12,6 +12,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -47,7 +49,9 @@ record SubTask(
         // 【核心】所有下游任务要求必须输出的字段（蒸馏时绝对不能删）
         Set<String> requiredFields,
         // 【核心】子任务输出的JSON Schema（强制结构化蒸馏）
-        String outputSchema
+        String outputSchema,
+        // 该任务需要调用的工具
+        Set<String> toolName
 ) {}
 
 /**
@@ -111,28 +115,31 @@ public class PlanExecute {
             List<Message> messages = fileBasedChatMemory.get(conversationId);
             fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
             //意图分析
-            sseSend.sendEvent(emitter,"开始进行意图分析...\n");
+            sseSend.sendEventThink(emitter,"开始进行意图分析...\n");
             TaskSchema taskSchema = parseIntent(userPrompt,messages);
             String taskSchemaMessage = "意图解析完成\n";
             if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
             if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
             if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
-            sseSend.sendEvent(emitter,taskSchemaMessage);
+            sseSend.sendEventThink(emitter,taskSchemaMessage);
 
             //对意图进行任务拆分
-            sseSend.sendEvent(emitter,"开始对任务进行拆分...\n");
+            sseSend.sendEventThink(emitter,"开始对任务进行拆分...\n");
             DecomposedTasks decomposedTasks = decomposeTaskWithContract(taskSchema);
             List<SubTask> subTasks = decomposedTasks.subTaskList();
             String taskMessage = subTasks.stream().map(s -> {
                 return "任务" + s.taskId() + "：" + s.taskName();
             }).collect(Collectors.joining("\n---\n"));
-            sseSend.sendEvent(emitter,"任务拆分完成：\n"+taskMessage);
+            sseSend.sendEventThink(emitter,"任务拆分完成：\n"+taskMessage);
 
             //对每个子任务执行，得到结果集
             List<DistilledResult> results = new ArrayList<>();
-            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(allTools, openAiChatModel);
             for(SubTask task:subTasks){
-                sseSend.sendEvent(emitter,"开始执行任务【"+task.taskName()+"】\n\n");
+                //获得该任务需要使用的工具集
+                ToolCallback[] tools = getTools(task.toolName());
+                //初始化执行该任务的智能体
+                Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
+                sseSend.sendEventThink(emitter,"开始执行任务【"+task.taskName()+"】\n\n");
                 //获取该任务对应所需的上游任务的结果
                 String upStreamTaskResult = checkAndFillUpstreamContext(task, results);
                 //将上游的结果作为记忆输入给智能体
@@ -151,32 +158,32 @@ public class PlanExecute {
             //整合结果集和意图，得到最终结果
             String s = fuseResults(taskSchema, results);
             fileBasedChatMemory.add(conversationId,List.of(new AssistantMessage(s)));//将模型返回的最终结果存入记忆
-            sseSend.sendEvent(emitter,s);
+            sseSend.sendEventResult(emitter,s);
             //关闭链接
             emitter.complete();
         });
         return emitter;
     }
+    //从所需工具名称集合中获取到具体工具集合
+    public ToolCallback[] getTools(Set<String> toolNames){
+        ToolCallback[] toolCallbacks = Arrays.stream(allTools).filter(t -> (toolNames.contains(t.getToolDefinition().name())||t.getToolDefinition().name().equals("assignmentFinish"))).toArray(ToolCallback[]::new);
+        return toolCallbacks;
+    }
 
     //意图解析
     public TaskSchema parseIntent(String userPrompt,List<Message> messages){
-        String historyMessage = messages.stream().map(m -> {
-            return m.getMessageType() + ": " + m.getText();
-        }).collect(Collectors.joining("\n"));
+        Prompt historyPrompt = new Prompt(messages);
         //结构化输出转换器，能将大模型输出转换成对应类型
         BeanOutputConverter<TaskSchema> converter = new BeanOutputConverter<>(TaskSchema.class);
         String prompt = """
                     请分析用户的需求，提取核心目标、约束条件、交付要求，以 JSON 格式返回。
-                    历史会话记录仅供参考，以用户输入需求为主，历史会话为辅
                     【用户输入】: {userInput}
                     【输出格式要求】: {format}
-                    【历史会话】: {history}
                 """;
-        TaskSchema taskSchema = chatClient.prompt().user(
+        TaskSchema taskSchema = chatClient.prompt(historyPrompt).user(
                         u -> u.text(prompt).
                                 param("userInput", userPrompt).
-                                param("format", converter.getJsonSchema())
-                                .param("history",historyMessage))
+                                param("format", converter.getJsonSchema()))
                 .system("你是意图解析器，根据用户的要求解析意图")
                 .call()
                 .entity(converter);
@@ -195,6 +202,7 @@ public class PlanExecute {
                - downstreamTaskIds：所有会用到该子任务结果的下游任务的taskId（不止紧邻的下一个任务，必须覆盖所有下游依赖）
                - requiredFields：所有下游任务要求该子任务必须输出的字段，蒸馏时绝对不能删除
                - outputSchema：子任务输出结果的JSON Schema，必须包含所有requiredFields
+               - tools：子任务执行需要调用的工具
             3. 子任务依赖关系必须清晰，确保所有下游需要的字段都被提前定义，不能出现下游需要的字段上游没输出的情况。
 
             用户核心目标：{mainGoal}

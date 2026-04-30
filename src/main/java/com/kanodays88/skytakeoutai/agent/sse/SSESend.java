@@ -9,9 +9,18 @@ import java.io.IOException;
 public class SSESend {
 
     // ====================== 辅助方法：发送SSE事件 ======================
-    public void sendEvent(SseEmitter emitter, String data) {
+    public void sendEventThink(SseEmitter emitter, String data) {
         try {
-            emitter.send(data); // Spring自动将对象转为JSON
+            emitter.send("Agent思考:"+data); // Spring自动将对象转为JSON
+        } catch (IOException e) {
+            // 发送失败时关闭连接
+            emitter.completeWithError(e);
+        }
+    }
+
+    public void sendEventResult(SseEmitter emitter,String data){
+        try {
+            emitter.send("Agent结果:"+data); // Spring自动将对象转为JSON
         } catch (IOException e) {
             // 发送失败时关闭连接
             emitter.completeWithError(e);

@@ -15,8 +15,9 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import java.io.IOException;
 @Slf4j
 public class PDFGenerationTool {
+    //TODO优化pdf生成
 
-    @Tool(description = "Generate a PDF file with given content")
+    @Tool(description = "生成pdf工具，不得使用特殊字体，规定字体为STSongStd-Light")
     public String generatePDF(
             @ToolParam(description = "Name of the file to save the generated PDF") String fileName,
             @ToolParam(description = "Content to be included in the PDF") String content) {
