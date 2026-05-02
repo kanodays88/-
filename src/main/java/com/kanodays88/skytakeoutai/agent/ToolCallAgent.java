@@ -68,7 +68,7 @@ public class ToolCallAgent extends ReActAgent{
                     核心规则：
                     1. 仅使用提供的工具完成当前任务，不要多余思考
                     2. 任务完成或无法继续时，调用assignmentFinish工具
-                    3. 当前剩余思考次数：{now} / {max}
+                    3. 当前剩余思考次数：{now} / {max} ;你需要在思考次数耗尽时尽可能完成任务
                     当前任务：{question}
                 """;
             PromptTemplate promptTemplate = new PromptTemplate(SYSTEM_PROMPT);
@@ -86,7 +86,7 @@ public class ToolCallAgent extends ReActAgent{
             //获取大模型返回的消息
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
             //通过SseEmitter将大模型思考过程发送给用户
-            sseSend.sendEventThink(sseEmitter,(String) assistantMessage.getMetadata().get("reasoningContent"));
+            sseSend.sendEventThink(sseEmitter,assistantMessage.getText());
 
             //大模型思考结果的调用工具消息
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();

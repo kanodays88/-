@@ -21,7 +21,7 @@ spring:
       api-key: ${API_KEY}
       chat:
         options:
-          model: qwen-plus-2025-07-28
+          model: deepseek-v4-flash
       embedding:
         options:
           model: text-embedding-v3  #向量模型
