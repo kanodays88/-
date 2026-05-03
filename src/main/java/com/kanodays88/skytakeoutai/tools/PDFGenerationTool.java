@@ -12,6 +12,8 @@ import com.itextpdf.layout.Document;
 import com.itextpdf.layout.element.Image;
 import com.itextpdf.layout.element.Paragraph;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
+import com.kanodays88.skytakeoutai.content.BaseContent;
+import com.kanodays88.skytakeoutai.utils.HttpPathUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -63,7 +65,7 @@ public class PDFGenerationTool {
         if (fileName == null || fileName.isBlank()) return "Error: File name is required.";
         if (content == null) return "Error: Content cannot be null.";
 
-        String fileDir = FileConstant.FILE_SAVE_DIR + "/file";
+        String fileDir = FileConstant.FILE_SAVE_DIR + "/"+BaseContent.getChatId()+ "/file";
         String filePath = fileDir + "/" + fileName;
         try {
             FileUtil.mkdir(fileDir);
@@ -76,7 +78,9 @@ public class PDFGenerationTool {
                 document.add(new Paragraph(sanitizeContent(content)));
                 addImages(document, imagePaths, fileDir);
             }
-            return "PDF generated successfully to: " + filePath;
+            //生成访问路径
+            String httpUrl = HttpPathUtil.writeHttpUrl("/" + BaseContent.getChatId() + "/file/" + fileName);
+            return "PDF生成成功，访问路径："+httpUrl;
         } catch (Exception e) {
             log.error("Error generating PDF", e);
             return "Error generating PDF: " + e.getMessage();

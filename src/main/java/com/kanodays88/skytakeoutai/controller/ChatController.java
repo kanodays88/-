@@ -8,6 +8,7 @@ import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import com.kanodays88.skytakeoutai.utils.CommonUtils;
 import com.kanodays88.skytakeoutai.utils.FileScanUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.document.Document;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +90,7 @@ public class ChatController {
 //        }
 //    }
 
-    @RequestMapping(value = "/{msg}")
+    @RequestMapping(value = "/{msg}",produces = "text/event-stream;charset=UTF-8")
     public SseEmitter serviceChat(@PathVariable("msg") String msg, @RequestHeader("chatId") String chatId){
         SseEmitter sseEmitter = planExecute.planExecute(msg, chatId);
         return sseEmitter;
@@ -96,22 +98,29 @@ public class ChatController {
 
     @GetMapping("/history")
     public String[] historyQuery(){
-        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(FileConstant.FILE_SAVE_DIR + "chatMemory");
+        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(FileConstant.FILE_SAVE_DIR + "/chatMemory");
         return filenamesWithoutExtension;
     }
 
     @GetMapping("/history/{chatId}")
     public List<String> historyQueryByChatId(@PathVariable("chatId") String chatId){
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
         List<Message> allMemory = fileBasedChatMemory.getAll(chatId);
         return allMemory.stream().map(m->m.getMessageType()+":"+m.getText()).collect(Collectors.toList());
     }
 
     @DeleteMapping("/history/remove/{chatId}")
     public String historyRemove(@PathVariable("chatId") String chatId){
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
         try{
             fileBasedChatMemory.clear(chatId);
+            File file = new File(FileConstant.FILE_SAVE_DIR + "/" + chatId);
+            if(file.exists() && file.isDirectory()){
+                //文件存在删除
+                FileUtils.deleteDirectory(new File(FileConstant.FILE_SAVE_DIR + "/"+chatId));
+            }else{
+                log.info("指定文件目录：{}不存在",file.getPath());
+            }
             return "删除成功";
         }catch (Exception e){
             log.info("删除历史会话失败：{}；错误原因：{}",chatId,e.getMessage());

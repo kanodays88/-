@@ -1,3 +1,11 @@
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true # 强制强制强制，重要的事情说三遍
+      force-request: true
+      force-response: true
 spring:
   application:
     name: sky-take-out-AI
@@ -21,7 +29,7 @@ spring:
       api-key: ${API_KEY}
       chat:
         options:
-          model: deepseek-v4-flash
+          model: deepseek-v4-pro
       embedding:
         options:
           model: text-embedding-v3  #向量模型

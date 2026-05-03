@@ -8,6 +8,7 @@ import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
+import com.kanodays88.skytakeoutai.content.BaseContent;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -15,13 +16,14 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
@@ -108,15 +110,23 @@ public class PlanExecute {
                 .defaultAdvisors(
                 new MyLoggerAdvisor()
         ).build();
-        this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "chatMemory");
+        this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
     public SseEmitter planExecute(String userPrompt,String conversationId){
         // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
         SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+        //获取当前主线程的上下文
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
         //异步执行智能体
         CompletableFuture.runAsync(()->{
             try{
+                //将主线程上下文设置到子线程中
+                if (attributes != null) {
+                    RequestContextHolder.setRequestAttributes(attributes);
+                }
+                //用ThreadLocal存储会话Id
+                BaseContent.setChatId(conversationId);
                 //获取当前会话最近10条消息记录
                 List<Message> messages = fileBasedChatMemory.get(conversationId);
                 fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
@@ -167,10 +177,14 @@ public class PlanExecute {
                 //关闭链接
                 emitter.complete();
             }catch (Exception e){
-                log.error("PlanExecute 执行失败", e.getMessage());
+                log.error("PlanExecute 执行失败：{}", e.getMessage());
                 sseSend.sendEventResult(emitter, "执行失败: " + e.getMessage());
                 emitter.completeWithError(e);
             }finally {
+                //删除ThreadLocal防止内存泄露
+                BaseContent.removeChatId();
+                //释放ThreadLocal
+                RequestContextHolder.resetRequestAttributes();
                 emitter.complete();
             }
         });
