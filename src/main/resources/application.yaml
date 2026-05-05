@@ -32,7 +32,7 @@ spring:
           model: deepseek-v4-pro
       embedding:
         options:
-          model: text-embedding-v3  #向量模型
+          model: text-embedding-v2  #向量模型
           dimensions: 1024   #向量维数
 
   datasource:

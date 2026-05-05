@@ -1,5 +1,6 @@
 package com.kanodays88.skytakeoutai.tools;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.json.JSONUtil;
 import org.springframework.ai.tool.annotation.Tool;
 
@@ -9,6 +10,6 @@ public class TimeTool {
 
     @Tool(description = "获取当前时间")
     public String getNowDate(){
-        return JSONUtil.toJsonStr(LocalDateTime.now());
+        return  DateUtil.format(LocalDateTime.now(), "yyyy-MM-dd HH:mm:ss");
     }
 }

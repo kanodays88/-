@@ -50,7 +50,7 @@ public class SetmealTool {
     private static final String REDIS_SETMEAL_QUERY = "lock:setmealQuery";
 
 
-    @Tool(description = "查询套餐工具")
+    @Tool(description = "外卖平台查询套餐工具")
     public List<SetmealVO> querySetmeal(@ToolParam(description = "查询套餐的条件") SetmealQuery setmealQuery){
         //生成key
         String key = generateCacheKey(setmealQuery);

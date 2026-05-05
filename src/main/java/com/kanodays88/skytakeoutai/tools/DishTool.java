@@ -44,7 +44,7 @@ public class DishTool {
 
     private static final String REDIS_DISH_QUERY = "lock:dishQuery";
 
-    @Tool(description = "查询菜品工具，传入的参数是查询菜品的查询条件")
+    @Tool(description = "外卖平台查询菜品工具")
     public List<DishVO> queryDish(@ToolParam(description = "查询菜品的条件") DishQuery dishQuery){
         //生成唯一key
         String key = generateCacheKey(dishQuery);

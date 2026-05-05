@@ -18,11 +18,15 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.DoubleConsumer;
+import java.util.stream.Collectors;
 
-@Component
 @Slf4j
+@Component
 public class WebSearchTool {
 
     //创建了一个静态的OkHttpClient实例，避免重复创建连接
@@ -45,7 +49,7 @@ public class WebSearchTool {
                 .withChunkSize(600)                    // 每个块最大300 token（搜索场景推荐小一点）
                 .withMinChunkSizeChars(50)             // 最小截断字符数（从标点符号截断的阈值）
                 .withMinChunkLengthToEmbed(20)         // 丢弃小于20字符的块
-                .withMaxNumChunks(100)                 // 单个文本最多生成100个块（足够用）
+                .withMaxNumChunks(50)                 // 单个文本最多生成50个块
                 .withKeepSeparator(true)                // 保留分隔符
                 .build();
     }
@@ -159,31 +163,49 @@ public class WebSearchTool {
         JsonNode rootArray = OBJECT_MAPPER.readTree(extractedJson);
         if (!rootArray.isArray()) return extractedJson;
 
-        // 1. 按搜索引擎原始顺序，逐个处理每个搜索结果
-        List<RefinedSearchResult> refinedResults = new ArrayList<>();
+        // 按搜索引擎原始顺序，将所有搜索结果整合成document集合，并按照id标记每个document所属的搜索结果
+        List<Document> documents = new ArrayList<>();
         for (int i = 0; i < rootArray.size(); i++) {
-            JsonNode node = rootArray.get(i);//原来节点结构
+            JsonNode node = rootArray.get(i);
             String content = node.has("content") ? node.get("content").asText("") : "";
-            if (content.length() < 50){
-                refinedResults.add(new RefinedSearchResult(i, content, node));
-                continue;
-            }
-
-            // 对单个搜索结果做RAG提纯
-            String coreContent = extractCoreContentFromSingleResult(content, query);
-            if (coreContent == null){
-                refinedResults.add(new RefinedSearchResult(i, content, node));
-                continue;
-            }
-
-            refinedResults.add(new RefinedSearchResult(i, coreContent, node));
+            // 把原始节点索引存入元数据，后面回填用
+            int finalI = i;
+            documents.add(new Document(content, new java.util.HashMap<>() {{
+                put("originalIndex", finalI);
+            }}));
+        }
+        //将整个document向量化，并且只提取最高相关度的5个片段，只有和这5个片段有关的搜索结果才会被返回，其余全部作废
+        List<Document> relevantDocs = extractCoreContentFromSingleResult(documents, query);
+        // ================== 新增：合并 originalIndex 相同的 Document ==================
+        // 将Document按 originalIndex 分组,相同会被分到一组
+        Map<Integer, List<Document>> groupedByIndex = new HashMap<>();
+        for (Document doc : relevantDocs) {
+            int idx = (int) doc.getMetadata().get("originalIndex");
+            //computeIfAbsent方法，如果hashMap中存在idx为键的元素则直接返回元素，无则执行右侧的lambda表达式
+            groupedByIndex.computeIfAbsent(idx, k -> new ArrayList<>()).add(doc);
         }
 
-        // 2. 构建最终JSON
+        //合并每组的 Document（content 拼接，元数据复用首项）
+        List<Document> mergedDocs = new ArrayList<>();
+        for (List<Document> docs : groupedByIndex.values()) {
+            if (docs.size() == 1) {
+                mergedDocs.add(docs.get(0));
+            } else {
+                // 拼接 content（可根据需求调整分隔符，如 "\n"、" " 等）
+                String combinedContent = docs.stream()
+                        .map(Document::getText)
+                        .collect(Collectors.joining("\n\n"));
+                // 构造成新的Document并存入
+                mergedDocs.add(new Document(combinedContent,docs.get(0).getMetadata()));
+            }
+        }
+        //构建最终json
         ArrayNode resultArray = OBJECT_MAPPER.createArrayNode();
-        for (RefinedSearchResult result : refinedResults) {
-            ObjectNode originalNode = (ObjectNode) result.originalNode().deepCopy();//获取原来节点结构
-            originalNode.put("content", result.coreContent()); // 修改/添加新字段内容
+        for (Document doc : mergedDocs) {
+            int originalIndex = (int) doc.getMetadata().get("originalIndex");
+            ObjectNode originalNode = (ObjectNode) rootArray.get(originalIndex).deepCopy();
+            // 仅替换content为RAG提纯后的内容，video/date/images完全保留
+            originalNode.put("content", doc.getText());
             resultArray.add(originalNode);
         }
 
@@ -199,9 +221,9 @@ public class WebSearchTool {
     /**
      * 从单个搜索结果中提取最核心的1个chunk
      */
-    private String extractCoreContentFromSingleResult(String content, String query) {
-        Document doc = new Document(content);
-        List<Document> chunks = textSplitter.split(List.of(doc));
+    private List<Document> extractCoreContentFromSingleResult(List<Document> documents, String query) {
+        //分片时每个分片都会保留原document的Metadata元信息
+        List<Document> chunks = textSplitter.split(documents);
         if (chunks.isEmpty()) return null;
 
         SimpleVectorStore vectorStore = SimpleVectorStore.builder(qianfanEmbeddingModel).build();
@@ -210,12 +232,12 @@ public class WebSearchTool {
         List<Document> relevantDocs = vectorStore.similaritySearch(
                 SearchRequest.builder()
                         .query(query)
-                        .topK(3)
+                        .topK(5)
                         .similarityThreshold(0.5)
                         .build()
         );
 
-        return relevantDocs.isEmpty() ? null : relevantDocs.get(0).getText();
+        return relevantDocs;
     }
 
     /**

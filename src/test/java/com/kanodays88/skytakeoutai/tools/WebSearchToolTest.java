@@ -18,11 +18,14 @@ class WebSearchToolTest {
 
     @Test
     public void testTool(){
-        try{
-            String s = webSearch.webSearch("上海旅游景点推荐");
-            System.out.println(s);
-        }catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+//        try{
+//            String s = webSearch.webSearch("上海旅游景点推荐");
+//            System.out.println(s);
+//        }catch (Exception e) {
+//            System.out.println(e.getMessage());
+//        }
+
+        TimeTool timeTool = new TimeTool();
+        System.out.println(timeTool.getNowDate());
     }
 }

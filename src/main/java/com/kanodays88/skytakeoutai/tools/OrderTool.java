@@ -41,7 +41,7 @@ public class OrderTool {
     private OrderDetailService orderDetailServiceImpl;
 
 
-    @Tool(description = "生成订单工具")
+    @Tool(description = "外卖平台生成订单工具")
     @Transactional
     public OrderVO makeOrder(@ToolParam(description = "生成订单所需信息")OrderQuery orderQuery){
         Orders orders = new Orders();
