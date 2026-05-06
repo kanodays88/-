@@ -5,6 +5,7 @@ import cn.hutool.json.JSONUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanodays88.skytakeoutai.advisor.MyLoggerAdvisor;
 import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
+
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
@@ -33,12 +34,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-// 1. 任务结构化模型（对应 OpenManus 的意图解析输出）
-record TaskSchema(
-        String mainGoal,        // 核心目标
-        String constraints,     // 约束条件
-        String deliverables     // 交付要求
-) {}
 
 /**
  * 2. 子任务契约：核心解决「蒸馏不丢下游信息」的关键
@@ -113,7 +108,7 @@ public class PlanExecute {
         this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
-    public SseEmitter planExecute(String userPrompt,String conversationId){
+    public SseEmitter planExecute(String originalTask, String conversationId){
         // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
         SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
         //获取当前主线程的上下文
@@ -127,21 +122,21 @@ public class PlanExecute {
                 }
                 //用ThreadLocal存储会话Id
                 BaseContent.setChatId(conversationId);
-                //获取当前会话最近10条消息记录
-                List<Message> messages = fileBasedChatMemory.get(conversationId);
-                fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
-                //意图分析
-                if(!sseSend.sendEventThink(emitter,"开始进行意图分析...\n")) return;
-                TaskSchema taskSchema = parseIntent(userPrompt,messages);
-                String taskSchemaMessage = "意图解析完成\n";
-                if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
-                if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
-                if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
-                if(!sseSend.sendEventThink(emitter,taskSchemaMessage)) return;
+//                //获取当前会话最近10条消息记录
+//                List<Message> messages = fileBasedChatMemory.get(conversationId);
+//                fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
+//                //意图分析
+//                if(!sseSend.sendEventThink(emitter,"开始进行意图分析...\n")) return;
+//                TaskSchema taskSchema = parseIntent(userPrompt,messages);
+//                String taskSchemaMessage = "意图解析完成\n";
+//                if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
+//                if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
+//                if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
+//                if(!sseSend.sendEventThink(emitter,taskSchemaMessage)) return;
 
                 //对意图进行任务拆分
                 if(!sseSend.sendEventThink(emitter,"开始对任务进行拆分...\n")) return;
-                DecomposedTasks decomposedTasks = decomposeTaskWithContract(taskSchema);
+                DecomposedTasks decomposedTasks = decomposeTaskWithContract(originalTask);
                 List<SubTask> subTasks = decomposedTasks.subTaskList();
                 String taskMessage = subTasks.stream().map(s -> {
                     return "任务" + s.taskId() + "：" + s.taskName();
@@ -171,7 +166,7 @@ public class PlanExecute {
                 }
 
                 //整合结果集和意图，得到最终结果
-                String s = fuseResults(taskSchema, results);
+                String s = fuseResults(originalTask, results);
                 fileBasedChatMemory.add(conversationId,List.of(new AssistantMessage(s)));//将模型返回的最终结果存入记忆
                 if(!sseSend.sendEventResult(emitter,s)) return;
                 //关闭链接
@@ -196,25 +191,25 @@ public class PlanExecute {
         return toolCallbacks;
     }
 
-    //意图解析
-    public TaskSchema parseIntent(String userPrompt,List<Message> messages){
-        Prompt historyPrompt = new Prompt(messages);
-        //结构化输出转换器，能将大模型输出转换成对应类型
-        BeanOutputConverter<TaskSchema> converter = new BeanOutputConverter<>(TaskSchema.class);
-        String prompt = """
-                    分析用户的需求，提取核心目标、约束条件、交付要求，以 JSON 格式返回。
-                    【输出格式要求】: {format}
-                """;
-        TaskSchema taskSchema = chatClient.prompt(historyPrompt).system(
-                        s -> s.text(prompt).
-                                param("format", converter.getJsonSchema()))
-                .user(userPrompt)
-                .call()
-                .entity(converter);
-        return taskSchema;
-    }
+//    //意图解析
+//    public TaskSchema parseIntent(String userPrompt,List<Message> messages){
+//        Prompt historyPrompt = new Prompt(messages);
+//        //结构化输出转换器，能将大模型输出转换成对应类型
+//        BeanOutputConverter<TaskSchema> converter = new BeanOutputConverter<>(TaskSchema.class);
+//        String prompt = """
+//                    分析用户的需求，提取核心目标、约束条件、交付要求，以 JSON 格式返回。
+//                    【输出格式要求】: {format}
+//                """;
+//        TaskSchema taskSchema = chatClient.prompt(historyPrompt).system(
+//                        s -> s.text(prompt).
+//                                param("format", converter.getJsonSchema()))
+//                .user(userPrompt)
+//                .call()
+//                .entity(converter);
+//        return taskSchema;
+//    }
     //任务分解
-    public DecomposedTasks decomposeTaskWithContract(TaskSchema taskSchema) {
+    public DecomposedTasks decomposeTaskWithContract(String task) {
         BeanOutputConverter<DecomposedTasks> converter = new BeanOutputConverter<>(DecomposedTasks.class);
         String prompt = """
             ##根据任务复杂度拆解为合适数量的子任务（0到5个）：
@@ -236,19 +231,16 @@ public class PlanExecute {
 
             输出格式要求：{format}
             """;
-        String userPrompt = """
-                    核心目标：{mainGoal}
-                    约束条件：{constraints}
-                    交付要求：{deliverables}
-                """;
+//        String userPrompt = """
+//                    核心目标：{mainGoal}
+//                    约束条件：{constraints}
+//                    交付要求：{deliverables}
+//                """;
 
         return chatClient.prompt()
                 .system(s -> s.text(prompt)
                         .param("format", converter.getJsonSchema()))
-                .user(u -> u.text(userPrompt)
-                        .param("mainGoal",taskSchema.mainGoal())
-                        .param("constraints",taskSchema.constraints())
-                        .param("deliverables",taskSchema.deliverables()))
+                .user(task)
                 .toolCallbacks(allTools)
                 .call()
                 .entity(converter);
@@ -335,21 +327,19 @@ public class PlanExecute {
     }
 
     //整合结果集和意图，得到最终结果
-    private String fuseResults(TaskSchema task, List<DistilledResult> subTaskResults) {
+    private String fuseResults(String task, List<DistilledResult> subTaskResults) {
         List<String> results = subTaskResults.stream().map(s -> s.structuredCoreResult()).collect(Collectors.toList());
         String prompt = """
             角色设定：{System}
             基于以下子任务结果，整合成最终结果报告返回给用户
             原始核心目标: {mainGoal}
-            交付要求: {deliverables}
             子任务结果列表: {subTaskResults}
             """;
 
         return chatClient.prompt()
                 .system(s -> s.text(prompt)
                         .param("System",ChatSystem.CHAT_SYSTEM)
-                        .param("mainGoal", task.mainGoal())
-                        .param("deliverables", task.deliverables())
+                        .param("mainGoal", task)
                         .param("subTaskResults", String.join("\n---\n", results)))
                 .call()
                 .content();
