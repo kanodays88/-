@@ -108,9 +108,9 @@ public class PlanExecute {
         this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
-    public SseEmitter planExecute(String originalTask, String conversationId){
-        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
-        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+    public void planExecute(String originalTask, String conversationId,SseEmitter emitter){
+//        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
+//        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
         //获取当前主线程的上下文
         RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
         //异步执行智能体
@@ -183,7 +183,6 @@ public class PlanExecute {
                 emitter.complete();
             }
         });
-        return emitter;
     }
     //从所需工具名称集合中获取到具体工具集合
     public ToolCallback[] getTools(Set<String> toolNames){

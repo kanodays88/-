@@ -1,17 +1,26 @@
 package com.kanodays88.skytakeoutai.controller;
 
 import com.kanodays88.skytakeoutai.agent.plan.PlanExecute;
+import com.kanodays88.skytakeoutai.agent.router.QuestionType;
+import com.kanodays88.skytakeoutai.agent.router.RouteDecision;
+import com.kanodays88.skytakeoutai.agent.router.RouterAgent;
 import com.kanodays88.skytakeoutai.common.ChatDecide;
 import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
+import com.kanodays88.skytakeoutai.skill.SkillRegistry;
 import com.kanodays88.skytakeoutai.utils.CommonUtils;
 import com.kanodays88.skytakeoutai.utils.FileScanUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.springdoc.core.parsers.KotlinCoroutinesReturnTypeParser;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +59,18 @@ public class ChatController {
     @Autowired
     private PlanExecute planExecute;
 
+    @Autowired
+    private OpenAiChatModel openAiChatModel;
+    @Autowired
+    private EmbeddingModel qianfanEmbeddingModel;
+    @Autowired
+    private ToolCallback[] allTools;
+    @Autowired
+    private SkillRegistry skillRegistry;
+
     private static final String CHAT_RAG_STATIC = "chat:ragStatic:";
+    @Autowired
+    private KotlinCoroutinesReturnTypeParser kotlinCoroutinesReturnTypeParser;
 //
 //    @RequestMapping(value = "/{msg}", produces = "text/html;charset=utf-8")
 //    public Flux<String> serviceChat(@PathVariable("msg") String msg, @RequestHeader("chatId") String chatId){
@@ -92,8 +112,28 @@ public class ChatController {
 
     @RequestMapping(value = "/{msg}",produces = "text/event-stream;charset=UTF-8")
     public SseEmitter serviceChat(@PathVariable("msg") String msg, @RequestHeader("chatId") String chatId){
-        SseEmitter sseEmitter = planExecute.planExecute(msg, chatId);
-        return sseEmitter;
+//        SseEmitter sseEmitter = planExecute.planExecute(msg, chatId);
+        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
+        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+        //进入RouterAgent
+        RouterAgent routerAgent = new RouterAgent(openAiChatModel, qianfanEmbeddingModel, allTools, skillRegistry);
+        //获取路由结果
+        RouteDecision route = routerAgent.route(msg, chatId);
+        if(route.questionType() == QuestionType.SIMPLE_CHAT){
+            //简单问候
+        }else if(route.questionType() == QuestionType.RAG_KNOWLEDGE){
+            //rag知识问答
+        }else if(route.questionType() == QuestionType.COMPLEX_TASK){
+            //复杂任务处理
+        }else if(route.questionType() == QuestionType.RAG_AND_TASK){
+            //复杂任务处理配合RAG知识提供
+        }else if(route.questionType() == QuestionType.AMBIGUOUS){
+            //缺失缺失关键信息或者意图不明确，反问用户
+        }else{
+            //异常
+        }
+
+        return emitter;
     }
 
     @GetMapping("/history")

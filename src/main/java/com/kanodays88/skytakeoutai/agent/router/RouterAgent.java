@@ -79,7 +79,7 @@ public class RouterAgent {
                 1. 如果向量相似度 > 0.7 → RAG_KNOWLEDGE
                 2. 如果匹配到业务技能，检查用户输入+历史对话是否提供了该技能的【必需参数】:
                    - 已完整提供所有必需参数 → COMPLEX_TASK
-                   - 缺少部分必需参数 → AMBIGUOUS（missingInfo 列出具体缺失的参数名和说明）
+                   - 缺少部分必需参数，或者用户需求模糊 → AMBIGUOUS（missingInfo 列出具体缺失的参数名和说明）
                 3. 如果没有匹配到技能，但需要 2 种以上工具 → COMPLEX_TASK
                 4. 同时满足 1 和 2/3 → RAG_AND_TASK
                 5. 以上都不符合 → SIMPLE_CHAT
