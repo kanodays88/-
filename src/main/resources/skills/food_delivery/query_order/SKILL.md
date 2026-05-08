@@ -8,15 +8,11 @@ metadata:
   version: 1.0
 ---
 
-## Required Parameters
+## Parameters
 | 参数名 | 类型 | 说明 |
 |--------|------|------|
-| phone | string | 用户下单时使用的电话号码 |
-
-## Optional Parameters
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| orderId | string | 具体要查询的订单号（如果不提供则查询该手机号下所有订单） |
+| phone | string | 用户下单时使用的电话号码（重要程度：高） |
+| orderId | string | 具体要查询的订单号，如果不提供则查询该手机号下所有订单（重要程度：低） |
 
 ## Execution Flow
 1. **获取用户手机号**: 如果用户未提供手机号，主动询问用户下单时使用的电话号码

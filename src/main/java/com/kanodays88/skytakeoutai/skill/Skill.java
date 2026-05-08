@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
  * <p>
  * Skill 在架构中作为「LLM 的参考上下文」使用：
  * <ul>
- *   <li>RouterAgent 将 Skill 的必需参数列表注入路由 prompt，辅助判断用户输入是否完整 → AMBIGUOUS</li>
+ *   <li>RouterAgent 根据 Skill 的高重要性参数判断用户输入是否完整 → AMBIGUOUS</li>
  *   <li>PlanExecute 将 Skill 的执行流程注入任务分解 prompt，指导子任务的生成顺序和关注点</li>
  * </ul>
  * <p>
@@ -39,11 +39,8 @@ public class Skill {
     /** 技能描述，简要说明该技能的作用 */
     private String description;
 
-    /** 必需参数列表 —— LLM 判断用户信息是否充分的依据 */
-    private List<SkillParameter> requiredParams;
-
-    /** 可选参数列表 */
-    private List<SkillParameter> optionalParams;
+    /** 统一参数列表 —— 通过 importance 字段标注重要程度（high/medium/low），LLM 参考 Execution Flow 自行判断必要性 */
+    private List<SkillParameter> parameters;
 
     /** 执行步骤列表，描述按序执行的业务流程 */
     private List<SkillStep> steps;
@@ -92,23 +89,12 @@ public class Skill {
 
         boolean hasStructured = false;
 
-        if (requiredParams != null && !requiredParams.isEmpty()) {
+        if (parameters != null && !parameters.isEmpty()) {
             hasStructured = true;
-            sb.append("### Required Parameters\n");
+            sb.append("### Parameters\n");
             sb.append("| 参数名 | 类型 | 说明 |\n");
             sb.append("|--------|------|------|\n");
-            for (SkillParameter p : requiredParams) {
-                sb.append("| ").append(p.getName()).append(" | ").append(p.getType()).append(" | ").append(p.getDescription()).append(" |\n");
-            }
-            sb.append("\n");
-        }
-
-        if (optionalParams != null && !optionalParams.isEmpty()) {
-            hasStructured = true;
-            sb.append("### Optional Parameters\n");
-            sb.append("| 参数名 | 类型 | 说明 |\n");
-            sb.append("|--------|------|------|\n");
-            for (SkillParameter p : optionalParams) {
+            for (SkillParameter p : parameters) {
                 sb.append("| ").append(p.getName()).append(" | ").append(p.getType()).append(" | ").append(p.getDescription()).append(" |\n");
             }
             sb.append("\n");
@@ -156,21 +142,22 @@ public class Skill {
     }
 
     /**
-     * 获取所有必需参数的名称列表。
-     * 用于 RouterAgent 快速判断用户输入中缺失了哪些必要信息。
+     * 获取重要性为 "high" 的参数名称列表。
+     * 用于 RouterAgent 快速判断用户输入中缺失了哪些关键信息。
      */
-    public List<String> getAllRequiredParamNames() {
-        if (requiredParams == null) return List.of();
-        return requiredParams.stream().map(SkillParameter::getName).collect(Collectors.toList());
+    public List<String> getHighImportanceParamNames() {
+        if (parameters == null) return List.of();
+        return parameters.stream()
+                .filter(p -> "high".equals(p.getImportance()))
+                .map(SkillParameter::getName)
+                .collect(Collectors.toList());
     }
 
     /**
-     * 获取所有参数（必需 + 可选）的名称列表。
+     * 获取所有参数的名称列表。
      */
     public List<String> getAllParamNames() {
-        java.util.List<String> names = new java.util.ArrayList<>();
-        if (requiredParams != null) requiredParams.forEach(p -> names.add(p.getName()));
-        if (optionalParams != null) optionalParams.forEach(p -> names.add(p.getName()));
-        return names;
+        if (parameters == null) return List.of();
+        return parameters.stream().map(SkillParameter::getName).collect(Collectors.toList());
     }
 }

@@ -11,6 +11,7 @@ import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.content.BaseContent;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
+import com.kanodays88.skytakeoutai.skill.Skill;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -108,7 +109,7 @@ public class PlanExecute {
         this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
-    public void planExecute(String originalTask, String conversationId,SseEmitter emitter){
+    public void planExecute(String originalTask, String conversationId, SseEmitter emitter){
 //        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
 //        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
         //获取当前主线程的上下文
@@ -122,6 +123,7 @@ public class PlanExecute {
                 }
                 //用ThreadLocal存储会话Id
                 BaseContent.setChatId(conversationId);
+
 //                //获取当前会话最近10条消息记录
 //                List<Message> messages = fileBasedChatMemory.get(conversationId);
 //                fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
@@ -227,6 +229,7 @@ public class PlanExecute {
                - outputSchema：子任务输出结果的JSON Schema，必须包含所有requiredFields
                - tools：子任务执行需要调用的工具
             3. 子任务依赖关系必须清晰，确保所有下游需要的字段都被提前定义，不能出现下游需要的字段上游没输出的情况。
+            4. 工具信息只做任务划分参考，不得使用工具
 
             输出格式要求：{format}
             """;

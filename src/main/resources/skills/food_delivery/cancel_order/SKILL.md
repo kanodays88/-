@@ -8,15 +8,11 @@ metadata:
   version: 1.0
 ---
 
-## Required Parameters
+## Parameters
 | 参数名 | 类型 | 说明 |
 |--------|------|------|
-| orderId | string | 要取消的订单号 |
-
-## Optional Parameters
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| phone | string | 用户手机号（用于辅助查找订单） |
+| orderId | string | 要取消的订单号（重要程度：高） |
+| phone | string | 用户手机号，用于辅助查找订单（重要程度：中） |
 
 ## Execution Flow
 1. **获取订单号**: 如果用户未提供订单号，根据用户提供的线索（如菜品名、时间等）使用 orderTool 查询并确定要取消的订单，向用户确认

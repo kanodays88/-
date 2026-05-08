@@ -7,9 +7,13 @@ import com.kanodays88.skytakeoutai.skill.Skill;
 import com.kanodays88.skytakeoutai.skill.SkillRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -36,19 +40,18 @@ public class RouterAgent {
     }
 
 
-    public RouteDecision route(String userPrompt, String conversationId) {
+    public RouteDecisionAndSkills route(String userPrompt, String conversationId) {
         //用LLM匹配这次用户提问所使用的skill
         List<String> selectedSkillNames = selectSkillsWithLLM(userPrompt);
-        String skillContext = buildSelectedSkillsContext(selectedSkillNames);
+        List<Skill> skills = buildSelectedSkillsContext(selectedSkillNames);
+        String skillContext = skills.isEmpty()||skills == null?"未匹配到技能":skillRegistry.getSkillsPromptContext(skills);
         //计算RAG的相似度
         double vectorScore = getVectorRelevanceScore(userPrompt);
         RouteDecision decision = llmClassify(userPrompt, conversationId, vectorScore, skillContext);
         //将LLM匹配到的全部skill名称携带到RouteDecision中，供下游Agent使用
-        return new RouteDecision(
-                decision.questionType(),
-                decision.reason(),
-                decision.missingInfo(),
-                selectedSkillNames
+        return new RouteDecisionAndSkills(
+                decision,
+                skills
         );
     }
 
@@ -68,7 +71,8 @@ public class RouterAgent {
 
         BeanOutputConverter<ClassifyResult> converter = new BeanOutputConverter<>(ClassifyResult.class);
         String systemPrompt = """
-                你是一个问题分类专家，根据用户输入和对话历史，判断问题类型。
+                你是一个问题分类专家，根据用户输入和对话历史，判断问题类型，并结合业务技能生成这次对话的总任务
+                工具信息只用做判断该问题需要用到那些工具，不得使用工具
 
                 当前向量相似度分数：{vectorScore}
 
@@ -77,40 +81,50 @@ public class RouterAgent {
 
                 【分类规则】
                 1. 如果向量相似度 > 0.7 → RAG_KNOWLEDGE
-                2. 如果匹配到业务技能，检查用户输入+历史对话是否提供了该技能的【必需参数】:
-                   - 已完整提供所有必需参数 → COMPLEX_TASK
-                   - 缺少部分必需参数，或者用户需求模糊 → AMBIGUOUS（missingInfo 列出具体缺失的参数名和说明）
+                2. 如果匹配到业务技能，根据技能的业务流程描述和参数表，
+                    综合判断用户输入+历史对话中的信息是否足以开始执行业务流程:
+                    - 信息充分、可以执行 → COMPLEX_TASK
+                    - 缺少关键信息，或需求模糊 → AMBIGUOUS
+                      （missingInfo 列出具体缺失的信息）
                 3. 如果没有匹配到技能，但需要 2 种以上工具 → COMPLEX_TASK
                 4. 同时满足 1 和 2/3 → RAG_AND_TASK
                 5. 以上都不符合 → SIMPLE_CHAT
 
                 【参数检查说明】
-                - 用户可能使用同义词或口语化表达，请按语义判断参数是否已提供
-                - 历史对话中已提供的参数也算已提供
-                - 匹配到多个技能时，任一技能的必需参数缺失都应列入 missingInfo
+                - 不要机械匹配参数名称，应根据业务流程描述判断哪些信息是当前步骤必需的
+                - 用户可能使用同义词或口语化表达，请按语义理解
+                - 历史对话中已提供的信息也算已提供
+                - 匹配到多个技能时，综合判断各技能所需关键信息是否齐全
 
                 【输出参数说明】
                 questionType: 问题分类的结果
                 reason: 判断理由
                 missingInfo: 缺失的信息列表（只有当questionType为AMBIGUOUS才会有内容，否则为空）
+                mainTask: 总任务
 
-                输出格式：{format}
+                JSON输出格式：{format}
                 """;
 
         String userContent = "用户问题：" + prompt + "\n历史对话：\n" + history + "\n向量相似度分数：" + vectorScore;
 
-        ClassifyResult result = chatClient.prompt()
+        ChatOptions chatOptions = ToolCallingChatOptions.builder()
+                .internalToolExecutionEnabled(false) // 核心配置：禁用Spring AI内部自动工具执行
+                // 可保留原有的其他通义千问专属配置（模型名、温度、top_p等）
+                .build();
+
+        Prompt userPrompt = new Prompt(new UserMessage(userContent), chatOptions);
+
+        ClassifyResult result = chatClient.prompt(userPrompt)
                 .system(s -> s.text(systemPrompt)
                         .param("vectorScore", String.valueOf(vectorScore))
                         .param("skillContext", skillContext)
                         .param("format", converter.getJsonSchema()))
-                .user(userContent)
-                .tools(allTools)
+                .toolCallbacks(allTools)
                 .call()
                 .entity(converter);
 
         if (result == null) {
-            return new RouteDecision(QuestionType.SIMPLE_CHAT, "LLM分类失败，默认简单对话", null, null);
+            return new RouteDecision(QuestionType.SIMPLE_CHAT, "LLM分类失败，默认简单对话", null,userContent);
         }
 
         QuestionType type;
@@ -120,10 +134,10 @@ public class RouterAgent {
             type = QuestionType.SIMPLE_CHAT;
         }
 
-        return new RouteDecision(type, result.reason(), result.missingInfo(), null);
+        return new RouteDecision(type, result.reason(), result.missingInfo(),result.mainTask());
     }
 
-    private record ClassifyResult(String questionType, String reason, List<String> missingInfo) {}
+    private record ClassifyResult(String questionType, String reason, List<String> missingInfo,String mainTask) {}
     private record SkillSelection(List<String> skillNames) {}
 
     private List<String> selectSkillsWithLLM(String userPrompt) {
@@ -160,15 +174,15 @@ public class RouterAgent {
      * @param skillNames
      * @return
      */
-    private String buildSelectedSkillsContext(List<String> skillNames) {
-        if (skillNames == null || skillNames.isEmpty()) return "未匹配到具体业务技能。";
+    private List<Skill> buildSelectedSkillsContext(List<String> skillNames) {
+        if (skillNames == null || skillNames.isEmpty()) return null;
         List<Skill> selected = skillNames.stream()
                 .map(name -> skillRegistry.getSkill(name))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        if (selected.isEmpty()) return "未匹配到具体业务技能。";
+        if (selected.isEmpty()) return null;
         //将指定的skill集合，格式化为LLM的上下文文本格式
-        return skillRegistry.getSkillsPromptContext(selected);
+        return selected;
     }
 
     private String buildHistoryContext(String conversationId) {

@@ -8,17 +8,13 @@ metadata:
   version: 1.0
 ---
 
-## Required Parameters
+## Parameters
 | 参数名 | 类型 | 说明 |
 |--------|------|------|
-| items | string[] | 用户想要购买的菜品或套餐名称列表 |
-| address | string | 配送地址 |
-| phone | string | 用户电话号码 |
-
-## Optional Parameters
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| note | string | 订单备注信息 |
+| items | string[] | 用户想要购买的菜品或套餐名称列表（重要程度：高） |
+| address | string | 配送地址（重要程度：高） |
+| phone | string | 用户电话号码（重要程度：高） |
+| note | string | 订单备注信息（重要程度：低） |
 
 ## Execution Flow
 1. **查询菜品或套餐详情**: 使用 dishTool 或 setmealTool 查询用户提到的菜品/套餐的具体信息（名称、价格、图片等）

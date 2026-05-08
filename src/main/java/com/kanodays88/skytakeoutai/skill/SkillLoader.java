@@ -59,6 +59,9 @@ public class SkillLoader {
     /** 匹配无序列表项：- item 或 * item */
     private static final Pattern BULLET_PATTERN = Pattern.compile("^\\s*[-*]\\s+(.+)$", Pattern.MULTILINE);
 
+    /** 匹配参数说明中的重要性标注，如 （重要程度：高） */
+    private static final Pattern IMPORTANCE_PATTERN = Pattern.compile("（重要程度：([高中低])）");
+
     private final ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
 
     /**
@@ -136,8 +139,7 @@ public class SkillLoader {
                     .metadata(parseMetadata(frontmatter))
                     .rawContent(content);
 
-            builder.requiredParams(parseParameterTable(findSection(sections, "Required Parameters", "必需参数", "required parameters", "required"), true));
-            builder.optionalParams(parseParameterTable(findSection(sections, "Optional Parameters", "可选参数", "optional parameters", "optional"), false));
+            builder.parameters(parseParameterTable(findSection(sections, "Parameters", "参数", "parameters")));
             builder.steps(parseSteps(findSection(sections, "Execution Flow", "执行流程", "execution flow", "steps", "流程")));
             builder.relatedTools(parseBulletList(findSection(sections, "Related Tools", "关联工具", "related tools", "tools", "工具")));
             builder.examples(parseBulletList(findSection(sections, "Examples", "示例", "examples", "例子")));
@@ -332,8 +334,13 @@ public class SkillLoader {
         return remainder.isBlank() ? "" : remainder;
     }
 
-    /** 解析 Markdown 参数表格为 SkillParameter 列表 */
-    List<SkillParameter> parseParameterTable(String sectionContent, boolean required) {
+    /**
+     * 解析 Markdown 参数表格为 SkillParameter 列表。
+     * <p>
+     * 解析参数名、类型、说明列。如果说明列包含"（重要程度：高/中/低）"后缀，
+     * 则提取对应的 importance 值并清理说明文本；未标注时默认 importance 为 medium。
+     */
+    List<SkillParameter> parseParameterTable(String sectionContent) {
         if (sectionContent == null || sectionContent.isBlank()) return new ArrayList<>();
         List<SkillParameter> params = new ArrayList<>();
         String[] lines = sectionContent.split("\n");
@@ -360,11 +367,45 @@ public class SkillLoader {
             SkillParameter param = new SkillParameter();
             param.setName(cells[nameCol].trim());
             param.setType(typeCol >= 0 && cells.length > typeCol ? cells[typeCol].trim() : "string");
-            param.setDescription(descCol >= 0 && cells.length > descCol ? cells[descCol].trim() : "");
-            param.setRequired(required);
+            String description = descCol >= 0 && cells.length > descCol ? cells[descCol].trim() : "";
+            param.setDescription(cleanDescription(description));
+            param.setImportance(extractImportance(description));
             params.add(param);
         }
         return params;
+    }
+
+    /**
+     * 从参数说明中提取重要程度。
+     * <p>
+     * 提取规则：
+     * <ul>
+     *   <li>"重要程度：高" → "high"</li>
+     *   <li>"重要程度：中" → "medium"</li>
+     *   <li>"重要程度：低" → "low"</li>
+     *   <li>未标注 → "medium"（默认）</li>
+     * </ul>
+     */
+    private String extractImportance(String description) {
+        if (description == null || description.isBlank()) return "medium";
+        Matcher m = IMPORTANCE_PATTERN.matcher(description);
+        if (m.find()) {
+            String level = m.group(1);
+            switch (level) {
+                case "高": return "high";
+                case "低": return "low";
+                default: return "medium";
+            }
+        }
+        return "medium";
+    }
+
+    /**
+     * 从参数说明中移除"（重要程度：高/中/低）"后缀，保持说明文本干净。
+     */
+    private String cleanDescription(String description) {
+        if (description == null || description.isBlank()) return "";
+        return IMPORTANCE_PATTERN.matcher(description).replaceAll("").trim();
     }
 
     /** 解析 Markdown 表格的一行 */

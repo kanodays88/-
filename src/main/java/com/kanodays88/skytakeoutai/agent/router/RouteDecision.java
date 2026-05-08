@@ -1,5 +1,7 @@
 package com.kanodays88.skytakeoutai.agent.router;
 
+import com.kanodays88.skytakeoutai.skill.Skill;
+
 import java.util.List;
 
 /**
@@ -15,5 +17,5 @@ public record RouteDecision(
         QuestionType questionType,      // 问题类型
         String reason,                  // 判定理由
         List<String> missingInfo,       // 缺失信息列表（AMIGUOUS时有值）
-        List<String> matchedSkillNames  // LLM 匹配到的全部业务技能名称
+        String mianTask                 //总结出这次对话的总任务
 ) {}

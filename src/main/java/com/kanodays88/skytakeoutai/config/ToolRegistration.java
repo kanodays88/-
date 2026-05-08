@@ -25,9 +25,9 @@ public class ToolRegistration {
         SetmealTool setmealTool = new SetmealTool();
         TimeTool timeTool = new TimeTool();
         return ToolCallbacks.from(
-//                dishTool,
-//                orderTool,
-//                setmealTool,
+                dishTool,
+                orderTool,
+                setmealTool,
                 timeTool,
                 assignmentFinishTool,
                 fileOperationTool,

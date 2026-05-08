@@ -3,6 +3,7 @@ package com.kanodays88.skytakeoutai.controller;
 import com.kanodays88.skytakeoutai.agent.plan.PlanExecute;
 import com.kanodays88.skytakeoutai.agent.router.QuestionType;
 import com.kanodays88.skytakeoutai.agent.router.RouteDecision;
+import com.kanodays88.skytakeoutai.agent.router.RouteDecisionAndSkills;
 import com.kanodays88.skytakeoutai.agent.router.RouterAgent;
 import com.kanodays88.skytakeoutai.common.ChatDecide;
 import com.kanodays88.skytakeoutai.common.ChatSystem;
@@ -118,19 +119,25 @@ public class ChatController {
         //进入RouterAgent
         RouterAgent routerAgent = new RouterAgent(openAiChatModel, qianfanEmbeddingModel, allTools, skillRegistry);
         //获取路由结果
-        RouteDecision route = routerAgent.route(msg, chatId);
-        if(route.questionType() == QuestionType.SIMPLE_CHAT){
+        RouteDecisionAndSkills route = routerAgent.route(msg, chatId);
+        if(route.decision().questionType() == QuestionType.SIMPLE_CHAT){
             //简单问候
-        }else if(route.questionType() == QuestionType.RAG_KNOWLEDGE){
+            System.out.println("简单问侯");
+        }else if(route.decision().questionType() == QuestionType.RAG_KNOWLEDGE){
             //rag知识问答
-        }else if(route.questionType() == QuestionType.COMPLEX_TASK){
+            System.out.println("知识问答");
+        }else if(route.decision().questionType() == QuestionType.COMPLEX_TASK){
             //复杂任务处理
-        }else if(route.questionType() == QuestionType.RAG_AND_TASK){
+            planExecute.planExecute(route.decision().mianTask(),chatId,emitter);
+        }else if(route.decision().questionType() == QuestionType.RAG_AND_TASK){
             //复杂任务处理配合RAG知识提供
-        }else if(route.questionType() == QuestionType.AMBIGUOUS){
+            System.out.println("复杂任务配合RAG处理");
+        }else if(route.decision().questionType() == QuestionType.AMBIGUOUS){
             //缺失缺失关键信息或者意图不明确，反问用户
+            System.out.println("反问用户");
         }else{
             //异常
+            System.out.println("异常");
         }
 
         return emitter;
