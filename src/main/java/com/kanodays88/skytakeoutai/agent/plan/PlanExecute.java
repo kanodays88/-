@@ -2,12 +2,12 @@ package com.kanodays88.skytakeoutai.agent.plan;
 
 
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanodays88.skytakeoutai.advisor.MyLoggerAdvisor;
 import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
-import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.content.BaseContent;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
@@ -33,6 +33,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
@@ -96,10 +104,11 @@ public class PlanExecute {
     @Autowired
     private ToolCallback[] allTools;
 
+    private final Object sseLock = new Object();
+
     public PlanExecute(OpenAiChatModel openAiChatModel){
         this.openAiChatModel = openAiChatModel;
         this.chatClient = ChatClient.builder(openAiChatModel)
-                .defaultSystem(ChatSystem.CHAT_SYSTEM)
                 .defaultAdvisors(
                 new MyLoggerAdvisor()
         ).build();
@@ -107,6 +116,7 @@ public class PlanExecute {
     }
     //计划执行，整个智能体执行的入口
     public String planExecute(String originalTask, String conversationId, SseEmitter emitter){
+        long overallStart = System.currentTimeMillis();
 //        //获取当前主线程的上下文
 //        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
 //        //异步执行智能体
@@ -181,43 +191,89 @@ public class PlanExecute {
 
 
         //对意图进行任务拆分
-        if(!SSESend.sendEventThink(emitter,"开始对任务进行拆分...\n")) return null;
+        if(!safeSendEventThink(emitter,"开始对任务进行拆分...\n")) return null;
+        long t0 = System.currentTimeMillis();
         DecomposedTasks decomposedTasks = decomposeTaskWithContract(originalTask);
+        log.info("[Phase] decomposeTask took {} ms", System.currentTimeMillis() - t0);
         List<SubTask> subTasks = decomposedTasks.subTaskList();
         String taskMessage = subTasks.stream().map(s -> {
             return "任务" + s.taskId() + "：" + s.taskName();
         }).collect(Collectors.joining("\n---\n"));
-        if(!SSESend.sendEventThink(emitter,"任务拆分完成：\n"+taskMessage)) return null;
-        //对每个子任务执行，得到结果集
-        List<DistilledResult> results = new ArrayList<>();
-        for(SubTask task:subTasks){
-            //获得该任务需要使用的工具集
-            ToolCallback[] tools = getTools(task.toolName());
-            //初始化执行该任务的智能体
-            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
-            if(!SSESend.sendEventThink(emitter,"开始执行任务【"+task.taskName()+"】\n")) return null;
-            //获取该任务对应所需的上游任务的结果
-            String upStreamTaskResult = checkAndFillUpstreamContext(task, results);
-            //将上游的结果作为记忆输入给智能体
-            kanodays88Manus.setMessageList(List.of(upStreamTaskResult).stream().map(s->new SystemMessage(s)).collect(Collectors.toList()));
+        if(!safeSendEventThink(emitter,"任务拆分完成：\n"+taskMessage)) return null;
+        //对每个子任务执行，得到结果集（并行wave执行）
+        ConcurrentHashMap<Integer, DistilledResult> resultMap = new ConcurrentHashMap<>();
+        List<Set<Integer>> waves = buildExecutionWaves(subTasks);
+        Map<Integer, SubTask> taskMap = subTasks.stream()
+                .collect(Collectors.toMap(SubTask::taskId, Function.identity()));
 
-            //执行任务，得到本次任务的原始结果
-            List<String> childResult = kanodays88Manus.run(task.taskContent(),task.taskName(),emitter);
-            //原始结果拼接
-            String result = childResult.stream().collect(Collectors.joining("/n---/n"));
-            //蒸馏任务结果
-            DistilledResult distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
+        for (Set<Integer> waveTaskIds : waves) {
+            ExecutorService executor = Executors.newFixedThreadPool(waveTaskIds.size());
+            try {
+                List<CompletableFuture<Void>> futures = new ArrayList<>();
+                for (int taskId : waveTaskIds) {
+                    SubTask task = taskMap.get(taskId);
+                    futures.add(CompletableFuture.runAsync(() -> {
+                        long taskStart = System.currentTimeMillis();
+                        log.info("[Phase] Starting subtask {}: {}", task.taskId(), task.taskName());
+                        try {
+                            ToolCallback[] tools = getTools(task.toolName());
+                            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
+                            safeSendEventThink(emitter, "开始执行任务【" + task.taskName() + "】\n");
+                            //获取该任务对应所需的上游任务的结果
+                            String upStreamTaskResult = checkAndFillUpstreamContext(task, resultMap);
+                            //将上游的结果作为记忆输入给智能体
+                            kanodays88Manus.setMessageList(List.of(upStreamTaskResult).stream()
+                                    .map(s -> new SystemMessage(s)).collect(Collectors.toList()));
 
-            results.add(distilledResult);
+                            //执行任务，得到本次任务的原始结果
+                            long tRun = System.currentTimeMillis();
+                            List<String> childResult = kanodays88Manus.run(task.taskContent(), task.taskName(), emitter);
+                            log.info("[Phase] Subtask {} run() took {} ms", task.taskId(), System.currentTimeMillis() - tRun);
+                            //原始结果拼接
+                            String result = childResult.stream().collect(Collectors.joining("/n---/n"));
+                            //蒸馏任务结果
+                            long tDistill = System.currentTimeMillis();
+                            DistilledResult distilledResult;
+                            if (shouldSkipDistill(task, result)) {
+                                distilledResult = new DistilledResult(task.taskId(), result, result, task);
+                                log.info("[Optimize] Skipped distill for task {} (already structured)", task.taskName());
+                            } else {
+                                distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
+                            }
+                            log.info("[Phase] Subtask {} distill took {} ms", task.taskId(), System.currentTimeMillis() - tDistill);
+
+                            resultMap.put(task.taskId(), distilledResult);
+                        } catch (Exception e) {
+                            log.error("[Optimize] Subtask {} failed: {}", task.taskId(), e.getMessage());
+                        }
+                    }, executor));
+                }
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            } finally {
+                executor.shutdown();
+            }
         }
 
         //整合结果集和意图，得到最终结果
-        String s = fuseResults(originalTask, results);
+        long tFuse = System.currentTimeMillis();
+        List<DistilledResult> orderedResults = subTasks.stream()
+                .map(t -> resultMap.get(t.taskId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        String s = fuseResults(originalTask, orderedResults, decomposedTasks.globalRequiredFields());
+        log.info("[Phase] fuseResults took {} ms", System.currentTimeMillis() - tFuse);
+        log.info("[Phase] TOTAL planExecute took {} ms", System.currentTimeMillis() - overallStart);
         return s;
     }
 
 
 
+
+    private boolean safeSendEventThink(SseEmitter emitter, String data) {
+        synchronized (sseLock) {
+            return SSESend.sendEventThink(emitter, data);
+        }
+    }
 
     //从所需工具名称集合中获取到具体工具集合
     public ToolCallback[] getTools(Set<String> toolNames){
@@ -264,6 +320,58 @@ public class PlanExecute {
     }
 
     /**
+     * Build execution waves from dependency graph (DAG topological sort).
+     * Wave 1 = tasks with no dependencies, Wave 2 = tasks depending on Wave 1, etc.
+     */
+    private List<Set<Integer>> buildExecutionWaves(List<SubTask> subTasks) {
+        // dependsOn: for each task, which upstream taskIds it depends on
+        Map<Integer, Set<Integer>> dependsOn = new HashMap<>();
+        Map<Integer, SubTask> taskMap = new HashMap<>();
+
+        for (SubTask task : subTasks) {
+            taskMap.put(task.taskId(), task);
+            dependsOn.put(task.taskId(), new HashSet<>());
+        }
+
+        // For each task, find tasks whose downstreamTaskIds contain this task's ID
+        // Those are the tasks this task depends on
+        for (SubTask task : subTasks) {
+            for (SubTask other : subTasks) {
+                if (other.downstreamTaskIds().contains(task.taskId())) {
+                    dependsOn.get(task.taskId()).add(other.taskId());
+                }
+            }
+        }
+
+        List<Set<Integer>> waves = new ArrayList<>();
+        Set<Integer> remaining = new HashSet<>(taskMap.keySet());
+
+        while (!remaining.isEmpty()) {
+            Set<Integer> wave = new HashSet<>();
+            for (int taskId : remaining) {
+                if (dependsOn.get(taskId).isEmpty()) {
+                    wave.add(taskId);
+                }
+            }
+
+            if (wave.isEmpty()) {
+                // Circular dependency fallback: add all remaining as one wave
+                wave.addAll(remaining);
+            }
+
+            waves.add(wave);
+            remaining.removeAll(wave);
+
+            // Remove completed tasks from dependency sets
+            for (int taskId : remaining) {
+                dependsOn.get(taskId).removeAll(wave);
+            }
+        }
+
+        return waves;
+    }
+
+    /**
      * 选取上游任务的蒸馏后结果，若有问题则提取原结果重新蒸馏
      * @param currentTask 当前任务
      * @param upstreamResults  上游任务列表
@@ -287,6 +395,44 @@ public class PlanExecute {
             context.append("上游任务:").append(upstreamTask.taskContent()).append("\n核心结果:").append(coreResult).append("\n---\n");
         }
         return context.toString();
+    }
+
+    /**
+     * Overloaded version that accepts a Map<Integer, DistilledResult> for parallel execution support.
+     */
+    private String checkAndFillUpstreamContext(SubTask currentTask, Map<Integer, DistilledResult> upstreamResults) {
+        StringBuilder context = new StringBuilder();
+        if (upstreamResults.isEmpty()) return "";
+
+        for (DistilledResult upstreamResult : upstreamResults.values()) {
+            if (!upstreamResult.subTask().downstreamTaskIds().contains(currentTask.taskId())) continue;
+
+            SubTask upstreamTask = upstreamResult.subTask();
+            String coreResult = upstreamResult.structuredCoreResult();
+
+            context.append("上游任务:").append(upstreamTask.taskContent()).append("\n核心结果:").append(coreResult).append("\n---\n");
+        }
+        return context.toString();
+    }
+
+    /**
+     * Determine whether a subtask result can skip LLM distillation.
+     * Returns true when the raw result is already valid JSON containing all required fields
+     * and is concise enough (<2000 chars), making further LLM distillation unnecessary.
+     */
+    private boolean shouldSkipDistill(SubTask task, String rawResult) {
+        try {
+            JsonNode json = new ObjectMapper().readTree(rawResult);
+            Set<String> required = task.requiredFields();
+            if (required != null && !required.isEmpty()) {
+                for (String field : required) {
+                    if (!json.has(field)) return false;
+                }
+            }
+            return rawResult.length() < 2000;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -344,19 +490,21 @@ public class PlanExecute {
     }
 
     //整合结果集和意图，得到最终结果
-    private String fuseResults(String task, List<DistilledResult> subTaskResults) {
+    private String fuseResults(String task, List<DistilledResult> subTaskResults, Set<String> globalRequiredFields) {
         List<String> results = subTaskResults.stream().map(s -> s.structuredCoreResult()).collect(Collectors.toList());
         String prompt = """
-            角色设定：{System}
-            基于以下子任务结果，整合成最终结果报告返回给用户
-            原始核心目标: {mainGoal}
-            子任务结果列表: {subTaskResults}
+            基于以下子任务的执行结果，整合成最终完整的任务报告返回给用户。
+            不要遗漏任何子任务的关键结果。
+            【核心目标】：{mainGoal}
+            【全局强制留存字段】：{globalFields}
+            【子任务结果列表】：
+            {subTaskResults}
             """;
 
         return chatClient.prompt()
                 .system(s -> s.text(prompt)
-                        .param("System",ChatSystem.CHAT_SYSTEM)
                         .param("mainGoal", task)
+                        .param("globalFields", String.join(", ", globalRequiredFields))
                         .param("subTaskResults", String.join("\n---\n", results)))
                 .call()
                 .content();
