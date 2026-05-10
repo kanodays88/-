@@ -9,23 +9,15 @@ import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
-import com.kanodays88.skytakeoutai.content.BaseContent;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
-import com.kanodays88.skytakeoutai.skill.Skill;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
