@@ -49,7 +49,7 @@ public class ToolCallAgent extends ReActAgent{
     }
 
     @Override
-    public boolean think(String userPrompt, String taskName, SseEmitter sseEmitter, SSESend sseSend) {
+    public boolean think(String userPrompt, String taskName, SseEmitter sseEmitter) {
         //如果“下一步提示词”不为空且不为空串
         if (getNextStepPrompt() != null && !getNextStepPrompt().isEmpty()) {
             //将“下一步提示词”构建成用户提示词
@@ -86,7 +86,7 @@ public class ToolCallAgent extends ReActAgent{
             //获取大模型返回的消息
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
             //通过SseEmitter将大模型思考过程发送给用户
-            sseSend.sendEventThink(sseEmitter,assistantMessage.getText());
+            SSESend.sendEventThink(sseEmitter,assistantMessage.getText());
 
             //大模型思考结果的调用工具消息
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
@@ -103,6 +103,7 @@ public class ToolCallAgent extends ReActAgent{
             if (toolCallList.isEmpty()) {
                 //最后将大模型的思考加入记忆消息队列，结束思考，选择不调用工具
                 getMessageList().add(assistantMessage);
+                SSESend.sendEventThink(sseEmitter,assistantMessage.getText());
                 return false;
             } else {
                 return true;

@@ -41,7 +41,7 @@ public abstract class BaseAgent {
     private List<Message> messageList = new ArrayList<>();
 
 
-    public List<String> run(String userPrompt, String taskName, SseEmitter emitter, SSESend sseSend) {
+    public List<String> run(String userPrompt, String taskName, SseEmitter emitter) {
         //智能体不空闲
         if (this.state != AgentState.IDLE) {
             throw new RuntimeException("Cannot run agent from state: " + this.state);
@@ -64,7 +64,7 @@ public abstract class BaseAgent {
                 currentStep = stepNumber;
                 log.info("Executing step " + stepNumber + "/" + maxSteps);
                 //执行智能体思考
-                String stepResult = step(userPrompt,taskName,emitter,sseSend);
+                String stepResult = step(userPrompt,taskName,emitter);
                 String result = "Step " + stepNumber + ": " + stepResult;
                 //卡死检测（预防无效步数浪费）
                 if(isStuck()){
@@ -125,5 +125,5 @@ public abstract class BaseAgent {
         this.messageList.clear();
     }
 
-    public abstract String step(String userPrompt,String taskName,SseEmitter sseEmitter,SSESend sseSend);
+    public abstract String step(String userPrompt,String taskName,SseEmitter sseEmitter);
 }

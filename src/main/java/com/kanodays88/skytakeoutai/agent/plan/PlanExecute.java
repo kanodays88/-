@@ -94,9 +94,6 @@ public class PlanExecute {
     private OpenAiChatModel openAiChatModel;
 
     @Autowired
-    private SSESend sseSend;
-
-    @Autowired
     private ToolCallback[] allTools;
 
     public PlanExecute(OpenAiChatModel openAiChatModel){
@@ -109,106 +106,124 @@ public class PlanExecute {
         this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
-    public void planExecute(String originalTask, String conversationId, SseEmitter emitter){
-//        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
-//        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
-        //获取当前主线程的上下文
-        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
-        //异步执行智能体
-        CompletableFuture.runAsync(()->{
-            try{
-                //将主线程上下文设置到子线程中
-                if (attributes != null) {
-                    RequestContextHolder.setRequestAttributes(attributes);
-                }
-                //用ThreadLocal存储会话Id
-                BaseContent.setChatId(conversationId);
+    public String planExecute(String originalTask, String conversationId, SseEmitter emitter){
+//        //获取当前主线程的上下文
+//        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+//        //异步执行智能体
+//        CompletableFuture.runAsync(()->{
+//            try{
+//                //将主线程上下文设置到子线程中
+//                if (attributes != null) {
+//                    RequestContextHolder.setRequestAttributes(attributes);
+//                }
+//
+////                //获取当前会话最近10条消息记录
+////                List<Message> messages = fileBasedChatMemory.get(conversationId);
+////                fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
+////                //意图分析
+////                if(!sseSend.sendEventThink(emitter,"开始进行意图分析...\n")) return;
+////                TaskSchema taskSchema = parseIntent(userPrompt,messages);
+////                String taskSchemaMessage = "意图解析完成\n";
+////                if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
+////                if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
+////                if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
+////                if(!sseSend.sendEventThink(emitter,taskSchemaMessage)) return;
+//
+//                //对意图进行任务拆分
+//                if(!sseSend.sendEventThink(emitter,"开始对任务进行拆分...\n")) return;
+//                DecomposedTasks decomposedTasks = decomposeTaskWithContract(originalTask);
+//                List<SubTask> subTasks = decomposedTasks.subTaskList();
+//                String taskMessage = subTasks.stream().map(s -> {
+//                    return "任务" + s.taskId() + "：" + s.taskName();
+//                }).collect(Collectors.joining("\n---\n"));
+//                if(!sseSend.sendEventThink(emitter,"任务拆分完成：\n"+taskMessage)) return;
+//                //对每个子任务执行，得到结果集
+//                List<DistilledResult> results = new ArrayList<>();
+//                for(SubTask task:subTasks){
+//                    //获得该任务需要使用的工具集
+//                    ToolCallback[] tools = getTools(task.toolName());
+//                    //初始化执行该任务的智能体
+//                    Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
+//                    if(!sseSend.sendEventThink(emitter,"开始执行任务【"+task.taskName()+"】\n")) return;
+//                    //获取该任务对应所需的上游任务的结果
+//                    String upStreamTaskResult = checkAndFillUpstreamContext(task, results);
+//                    //将上游的结果作为记忆输入给智能体
+//                    kanodays88Manus.setMessageList(List.of(upStreamTaskResult).stream().map(s->new SystemMessage(s)).collect(Collectors.toList()));
+//
+//                    //执行任务，得到本次任务的原始结果
+//                    List<String> childResult = kanodays88Manus.run(task.taskContent(),task.taskName(),emitter,sseSend);
+//                    //原始结果拼接
+//                    String result = childResult.stream().collect(Collectors.joining("/n---/n"));
+//                    //蒸馏任务结果
+//                    DistilledResult distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
+//
+//                    results.add(distilledResult);
+//                }
+//
+//                //整合结果集和意图，得到最终结果
+//                String s = fuseResults(originalTask, results);
+//                fileBasedChatMemory.add(conversationId,List.of(new AssistantMessage(s)));//将模型返回的最终结果存入记忆
+//                if(!sseSend.sendEventResult(emitter,s)) return;
+//                //关闭链接
+//                emitter.complete();
+//            }catch (Exception e){
+//                log.error("PlanExecute 执行失败：{}", e.getMessage());
+//                sseSend.sendEventResult(emitter, "执行失败: " + e.getMessage());
+//                emitter.completeWithError(e);
+//            }finally {
+//                //删除ThreadLocal防止内存泄露
+//                BaseContent.removeChatId();
+//                //释放ThreadLocal
+//                RequestContextHolder.resetRequestAttributes();
+//                emitter.complete();
+//            }
+//        });
 
-//                //获取当前会话最近10条消息记录
-//                List<Message> messages = fileBasedChatMemory.get(conversationId);
-//                fileBasedChatMemory.add(conversationId,List.of(new UserMessage(userPrompt)));//将用户输入存记忆
-//                //意图分析
-//                if(!sseSend.sendEventThink(emitter,"开始进行意图分析...\n")) return;
-//                TaskSchema taskSchema = parseIntent(userPrompt,messages);
-//                String taskSchemaMessage = "意图解析完成\n";
-//                if(!taskSchema.mainGoal().equals("") && !taskSchema.mainGoal().isEmpty()) taskSchemaMessage += "核心目标: "+taskSchema.mainGoal()+"\n";
-//                if(!taskSchema.deliverables().equals("") && !taskSchema.deliverables().isEmpty()) taskSchemaMessage += "交付要求: "+taskSchema.deliverables()+"\n";
-//                if(!taskSchema.constraints().equals("") && !taskSchema.constraints().isEmpty()) taskSchemaMessage += "约束条件: "+taskSchema.constraints()+"\n";
-//                if(!sseSend.sendEventThink(emitter,taskSchemaMessage)) return;
 
-                //对意图进行任务拆分
-                if(!sseSend.sendEventThink(emitter,"开始对任务进行拆分...\n")) return;
-                DecomposedTasks decomposedTasks = decomposeTaskWithContract(originalTask);
-                List<SubTask> subTasks = decomposedTasks.subTaskList();
-                String taskMessage = subTasks.stream().map(s -> {
-                    return "任务" + s.taskId() + "：" + s.taskName();
-                }).collect(Collectors.joining("\n---\n"));
-                if(!sseSend.sendEventThink(emitter,"任务拆分完成：\n"+taskMessage)) return;
-                //对每个子任务执行，得到结果集
-                List<DistilledResult> results = new ArrayList<>();
-                for(SubTask task:subTasks){
-                    //获得该任务需要使用的工具集
-                    ToolCallback[] tools = getTools(task.toolName());
-                    //初始化执行该任务的智能体
-                    Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
-                    if(!sseSend.sendEventThink(emitter,"开始执行任务【"+task.taskName()+"】\n")) return;
-                    //获取该任务对应所需的上游任务的结果
-                    String upStreamTaskResult = checkAndFillUpstreamContext(task, results);
-                    //将上游的结果作为记忆输入给智能体
-                    kanodays88Manus.setMessageList(List.of(upStreamTaskResult).stream().map(s->new SystemMessage(s)).collect(Collectors.toList()));
+        //对意图进行任务拆分
+        if(!SSESend.sendEventThink(emitter,"开始对任务进行拆分...\n")) return null;
+        DecomposedTasks decomposedTasks = decomposeTaskWithContract(originalTask);
+        List<SubTask> subTasks = decomposedTasks.subTaskList();
+        String taskMessage = subTasks.stream().map(s -> {
+            return "任务" + s.taskId() + "：" + s.taskName();
+        }).collect(Collectors.joining("\n---\n"));
+        if(!SSESend.sendEventThink(emitter,"任务拆分完成：\n"+taskMessage)) return null;
+        //对每个子任务执行，得到结果集
+        List<DistilledResult> results = new ArrayList<>();
+        for(SubTask task:subTasks){
+            //获得该任务需要使用的工具集
+            ToolCallback[] tools = getTools(task.toolName());
+            //初始化执行该任务的智能体
+            Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
+            if(!SSESend.sendEventThink(emitter,"开始执行任务【"+task.taskName()+"】\n")) return null;
+            //获取该任务对应所需的上游任务的结果
+            String upStreamTaskResult = checkAndFillUpstreamContext(task, results);
+            //将上游的结果作为记忆输入给智能体
+            kanodays88Manus.setMessageList(List.of(upStreamTaskResult).stream().map(s->new SystemMessage(s)).collect(Collectors.toList()));
 
-                    //执行任务，得到本次任务的原始结果
-                    List<String> childResult = kanodays88Manus.run(task.taskContent(),task.taskName(),emitter,sseSend);
-                    //原始结果拼接
-                    String result = childResult.stream().collect(Collectors.joining("/n---/n"));
-                    //蒸馏任务结果
-                    DistilledResult distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
+            //执行任务，得到本次任务的原始结果
+            List<String> childResult = kanodays88Manus.run(task.taskContent(),task.taskName(),emitter);
+            //原始结果拼接
+            String result = childResult.stream().collect(Collectors.joining("/n---/n"));
+            //蒸馏任务结果
+            DistilledResult distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
 
-                    results.add(distilledResult);
-                }
+            results.add(distilledResult);
+        }
 
-                //整合结果集和意图，得到最终结果
-                String s = fuseResults(originalTask, results);
-                fileBasedChatMemory.add(conversationId,List.of(new AssistantMessage(s)));//将模型返回的最终结果存入记忆
-                if(!sseSend.sendEventResult(emitter,s)) return;
-                //关闭链接
-                emitter.complete();
-            }catch (Exception e){
-                log.error("PlanExecute 执行失败：{}", e.getMessage());
-                sseSend.sendEventResult(emitter, "执行失败: " + e.getMessage());
-                emitter.completeWithError(e);
-            }finally {
-                //删除ThreadLocal防止内存泄露
-                BaseContent.removeChatId();
-                //释放ThreadLocal
-                RequestContextHolder.resetRequestAttributes();
-                emitter.complete();
-            }
-        });
+        //整合结果集和意图，得到最终结果
+        String s = fuseResults(originalTask, results);
+        return s;
     }
+
+
+
+
     //从所需工具名称集合中获取到具体工具集合
     public ToolCallback[] getTools(Set<String> toolNames){
         ToolCallback[] toolCallbacks = Arrays.stream(allTools).filter(t -> (toolNames.contains(t.getToolDefinition().name())||t.getToolDefinition().name().equals("assignmentFinish"))).toArray(ToolCallback[]::new);
         return toolCallbacks;
     }
-
-//    //意图解析
-//    public TaskSchema parseIntent(String userPrompt,List<Message> messages){
-//        Prompt historyPrompt = new Prompt(messages);
-//        //结构化输出转换器，能将大模型输出转换成对应类型
-//        BeanOutputConverter<TaskSchema> converter = new BeanOutputConverter<>(TaskSchema.class);
-//        String prompt = """
-//                    分析用户的需求，提取核心目标、约束条件、交付要求，以 JSON 格式返回。
-//                    【输出格式要求】: {format}
-//                """;
-//        TaskSchema taskSchema = chatClient.prompt(historyPrompt).system(
-//                        s -> s.text(prompt).
-//                                param("format", converter.getJsonSchema()))
-//                .user(userPrompt)
-//                .call()
-//                .entity(converter);
-//        return taskSchema;
-//    }
     //任务分解
     public DecomposedTasks decomposeTaskWithContract(String task) {
         BeanOutputConverter<DecomposedTasks> converter = new BeanOutputConverter<>(DecomposedTasks.class);

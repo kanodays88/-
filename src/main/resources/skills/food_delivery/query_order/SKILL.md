@@ -2,7 +2,7 @@
 name: query_order
 domain: food_delivery
 description: 帮助用户查询已有的外卖订单信息
-compatibility: 需要联网访问订单查询API
+compatibility: 需要访问订单查询API
 metadata:
   author: dev-team
   version: 1.0

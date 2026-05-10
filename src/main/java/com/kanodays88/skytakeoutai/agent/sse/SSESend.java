@@ -7,11 +7,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-@Component
 public class SSESend {
 
     // ====================== 辅助方法：发送SSE事件 ======================
-    public boolean sendEventThink(SseEmitter emitter, String data) {
+    public static boolean sendEventThink(SseEmitter emitter, String data) {
         try {
             // 核心修改：同上，强制 UTF-8
             emitter.send(
@@ -26,7 +25,7 @@ public class SSESend {
         }
     }
 
-    public boolean sendEventResult(SseEmitter emitter,String data){
+    public static boolean sendEventResult(SseEmitter emitter,String data){
         try {
             // 核心修改：同上，强制 UTF-8
             emitter.send(

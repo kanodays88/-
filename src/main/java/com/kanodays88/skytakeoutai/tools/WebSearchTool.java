@@ -23,6 +23,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.DoubleConsumer;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -46,7 +51,7 @@ public class WebSearchTool {
 
         // 自定义分片参数（搜索场景推荐配置）
         this.textSplitter = TokenTextSplitter.builder()
-                .withChunkSize(600)                    // 每个块最大300 token（搜索场景推荐小一点）
+                .withChunkSize(300)                    // 每个块最大300 token（搜索场景推荐小一点）
                 .withMinChunkSizeChars(50)             // 最小截断字符数（从标点符号截断的阈值）
                 .withMinChunkLengthToEmbed(20)         // 丢弃小于20字符的块
                 .withMaxNumChunks(50)                 // 单个文本最多生成50个块
@@ -58,15 +63,135 @@ public class WebSearchTool {
     @Value("${app.baidu.api.key}")
     private String ApiKey;
 
-    @Tool(description = "搜索工具，传入关键词搜索出结果,每个搜索结果包含日期，文本内容，视频链接，图片链接")
-    public String webSearch(@ToolParam(description = "搜索的关键词") String key) throws IOException{
-        //得到整理后的原始搜索结果
-        String webSearchResult = baiDuiWebSearch(key);
-        log.info("整理后的原始结果：{}",webSearchResult);
-        //rag检索增强，提炼搜索精华
-        String ragResult = ragOptimizeJson(webSearchResult, key);
-        log.info("rag增强结果：{}",ragResult);
-        return ragResult;
+//    public String webSearch(String key) throws IOException{
+//        //得到整理后的原始搜索结果
+//        String webSearchResult = baiDuiWebSearch(key);
+//        log.info("整理后的原始结果：{}",webSearchResult);
+//        //rag检索增强，提炼搜索精华
+//        String ragResult = ragOptimizeJson(webSearchResult, key);
+//        log.info("rag增强结果：{}",ragResult);
+//        return ragResult;
+//    }
+
+    /**
+     * 批量搜索工具，可同时搜索多个关键词。参数keywords用"||"分隔，例如："上海热门景点||上海特色美食||上海交通路线"。内部会自动并行搜索并去重合并结果
+     */
+    @Tool(description = "批量搜索工具，可同时搜索多个关键词。参数keywords用\"||\"分隔，例如：\"上海热门景点||上海特色美食||上海交通路线\"。内部会自动并行搜索并去重合并结果")
+    public String batchWebSearch(@ToolParam(description = "搜索关键词，多个关键词用||分隔，例如：上海景点||上海美食||上海交通") String keywords) throws Exception {
+        // 参数校验：空/null 返回错误 JSON
+        if (keywords == null || keywords.trim().isEmpty()) {
+            return "{\"error\": \"No keywords provided\", \"message\": \"请提供至少一个搜索关键词\"}";
+        }
+
+        // 按 || 分割，去空，限制最大6个
+        String[] keywordArray = keywords.split("\\|\\|");
+        List<String> validKeywords = Arrays.stream(keywordArray)
+                .map(String::trim)
+                .filter(k -> !k.isEmpty())
+                .limit(6)
+                .collect(Collectors.toList());
+
+        if (validKeywords.isEmpty()) {
+            return "{\"error\": \"No valid keywords\", \"message\": \"请提供至少一个有效的搜索关键词\"}";
+        }
+
+        // 并行搜索：每个关键词独立 CompletableFuture
+        ExecutorService executor = Executors.newFixedThreadPool(validKeywords.size());
+        try {
+            List<CompletableFuture<Map.Entry<String, String>>> futures = new ArrayList<>();
+            for (String kw : validKeywords) {
+                futures.add(CompletableFuture.supplyAsync(() -> {
+                    try {
+                        String rawResult = baiDuiWebSearch(kw);
+                        // 给每个 reference 添加 searchedKeyword 标记
+                        rawResult = annotateWithKeyword(rawResult, kw);
+                        return Map.entry(kw, rawResult);
+                    } catch (Exception e) {
+                        log.warn("关键词 [{}] 搜索失败: {}", kw, e.getMessage());
+                        return Map.entry(kw, "{\"error\":\"搜索失败: " + e.getMessage() + "\"}");
+                    }
+                }, executor));
+            }
+
+            // 等待所有完成
+            List<Map.Entry<String, String>> allResults = futures.stream()
+                    .map(f -> {
+                        try { return f.get(60, TimeUnit.SECONDS); }
+                        catch (Exception e) { return Map.entry("unknown", "{\"error\":\"搜索超时\"}"); }
+                    })
+                    .collect(Collectors.toList());
+
+            // 合并所有结果为一个大的 JSON references 数组
+            String mergedJson = mergeAllResults(allResults);
+
+            // 对合并后的结果做一次全局 RAG 增强（使用压缩后的参数）
+            String query = String.join(" ", validKeywords);
+            String ragResult = ragOptimizeJson(mergedJson, query);
+
+            return ragResult;
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    /**
+     * 给 JSON references 中每个 reference 添加 searchedKeyword 字段
+     */
+    private String annotateWithKeyword(String jsonResult, String keyword) throws IOException {
+        //这是一个数组型json结构，他的子JSONNode是数组内的元素
+        JsonNode rootArray = OBJECT_MAPPER.readTree(jsonResult);
+        if (!rootArray.isArray()) return jsonResult;
+
+        ArrayNode annotatedArray = OBJECT_MAPPER.createArrayNode();
+        for (JsonNode node : rootArray) {
+            ObjectNode annotated = node.deepCopy();
+            annotated.put("searchedKeyword", keyword);
+            annotatedArray.add(annotated);
+        }
+        return OBJECT_MAPPER.writeValueAsString(annotatedArray);
+    }
+
+    /**
+     * 合并多个关键词的搜索结果，去重（按content文本去重）
+     */
+    private String mergeAllResults(List<Map.Entry<String, String>> allResults) throws IOException {
+        ArrayNode mergedArray = OBJECT_MAPPER.createArrayNode();
+        HashSet<String> seenContents = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : allResults) {
+            //遍历每个关键字的查询结果
+            String keyword = entry.getKey();
+            String json = entry.getValue();
+
+            try {
+                JsonNode rootArray = OBJECT_MAPPER.readTree(json);
+                if (!rootArray.isArray()) continue;
+
+                for (JsonNode node : rootArray) {
+                    String content = node.has("content") ? node.get("content").asText("") : "";
+                    // 去重：相同 content 只保留第一次出现的，用于做hash匹配的前缀
+                    String contentHash = content.length() > 50 ? content.substring(0, 50) : content;
+                    if (!seenContents.contains(contentHash)) {
+                        seenContents.add(contentHash);
+                        // 添加 searchedKeyword 标记
+                        ObjectNode withKeyword = node.deepCopy();
+                        if (!withKeyword.has("searchedKeyword")) {
+                            withKeyword.put("searchedKeyword", keyword);
+                        }
+                        mergedArray.add(withKeyword);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("合并结果时解析失败: {}", e.getMessage());
+            }
+        }
+
+        // 如果全部失败，包一个错误信息
+        if (mergedArray.isEmpty()) {
+            return "{\"error\":\"All searches failed\",\"partialResults\":[]}";
+        }
+
+        return OBJECT_MAPPER.writeValueAsString(mergedArray);
     }
 
     /**
@@ -232,7 +357,7 @@ public class WebSearchTool {
         List<Document> relevantDocs = vectorStore.similaritySearch(
                 SearchRequest.builder()
                         .query(query)
-                        .topK(5)
+                        .topK(3)
                         .similarityThreshold(0.5)
                         .build()
         );

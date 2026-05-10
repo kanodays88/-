@@ -19,6 +19,9 @@ public class SkyTakeOutAiApplication {
     //配置向量数据库，基于内存的向量数据库
     @Bean
     public VectorStore vectorStore(OpenAiEmbeddingModel model){
-        return SimpleVectorStore.builder(model).build();
+
+        SimpleVectorStore vectorStore = SimpleVectorStore.builder(model).build();
+
+        return vectorStore;
     }
 }

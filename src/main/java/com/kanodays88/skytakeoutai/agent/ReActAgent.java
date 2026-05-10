@@ -9,14 +9,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public abstract class ReActAgent extends BaseAgent{
 
     //让智能体思考问题是否解决
-    public abstract boolean think(String userPrompt,String taskName,SseEmitter sseEmitter, SSESend sseSend);
+    public abstract boolean think(String userPrompt,String taskName,SseEmitter sseEmitter);
     //让智能体动手解决
     public abstract String act();
 
     @Override
-    public String step(String userPrompt, String taskName, SseEmitter sseEmitter, SSESend sseSend) {
+    public String step(String userPrompt, String taskName, SseEmitter sseEmitter) {
         try{
-            boolean think = think(userPrompt,taskName,sseEmitter,sseSend);
+            boolean think = think(userPrompt,taskName,sseEmitter);
             if(!think){
                 return "思考完成-无需调用工具";
             }

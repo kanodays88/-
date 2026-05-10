@@ -14,15 +14,12 @@ public class ToolRegistration {
      * @return
      */
     @Bean
-    public ToolCallback[] allTools(WebSearchTool webSearchTool){
+    public ToolCallback[] allTools(WebSearchTool webSearchTool,DishTool dishTool,SetmealTool setmealTool,OrderTool orderTool){
         AssignmentFinishTool assignmentFinishTool = new AssignmentFinishTool();
         FileOperationTool fileOperationTool = new FileOperationTool();
         PDFGenerationTool pdfGenerationTool = new PDFGenerationTool();
         ResourceDownloadTool resourceDownloadTool = new ResourceDownloadTool();
         WebScrapingTool webScrapingTool = new WebScrapingTool();
-        DishTool dishTool = new DishTool();
-        OrderTool orderTool = new OrderTool();
-        SetmealTool setmealTool = new SetmealTool();
         TimeTool timeTool = new TimeTool();
         return ToolCallbacks.from(
                 dishTool,
