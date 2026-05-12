@@ -8,7 +8,10 @@ import com.kanodays88.skytakeoutai.advisor.MyLoggerAdvisor;
 import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
+import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
+import com.kanodays88.skytakeoutai.content.BaseContent;
+import com.kanodays88.skytakeoutai.entity.dto.UserLoginDTO;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,8 +21,11 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -36,32 +42,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
-/**
- * 2. 子任务契约：核心解决「蒸馏不丢下游信息」的关键
- */
-record SubTask(
-        // 子任务序号（全局唯一）
-        int taskId,
-        // 子任务名称
-        String taskName,
-        // 子任务执行内容
-        String taskContent,
-        // 【核心】所有依赖该子任务的下游任务ID（不止紧邻的下一个）
-        Set<Integer> downstreamTaskIds,
-        // 【核心】所有下游任务要求必须输出的字段（蒸馏时绝对不能删）
-        Set<String> requiredFields,
-        // 【核心】子任务输出的JSON Schema（强制结构化蒸馏）
-        String outputSchema,
-        // 该任务需要调用的工具
-        Set<String> toolName
-) {}
 
 /**
  * 3. 任务分解结果：带全局约束的子任务列表
  */
 record DecomposedTasks(
-        // 【核心】全局强制留存字段（所有子任务蒸馏都不能删）
-        Set<String> globalRequiredFields,
         // 带契约的子任务列表
         List<SubTask> subTaskList
 ) {}
@@ -89,7 +74,6 @@ public class PlanExecute {
 
     private ChatClient chatClient;
 
-    private FileBasedChatMemory fileBasedChatMemory;
 
     private OpenAiChatModel openAiChatModel;
 
@@ -98,16 +82,15 @@ public class PlanExecute {
 
     private final Object sseLock = new Object();
 
-    public PlanExecute(OpenAiChatModel openAiChatModel){
+    public PlanExecute(OpenAiChatModel openAiChatModel) throws IOException {
         this.openAiChatModel = openAiChatModel;
         this.chatClient = ChatClient.builder(openAiChatModel)
                 .defaultAdvisors(
                 new MyLoggerAdvisor()
         ).build();
-        this.fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
     }
     //计划执行，整个智能体执行的入口
-    public String planExecute(String originalTask, String conversationId, SseEmitter emitter){
+    public String planExecute(String originalTask, String conversationId, SseEmitter emitter) throws IOException {
         long overallStart = System.currentTimeMillis();
 //        //获取当前主线程的上下文
 //        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
@@ -180,7 +163,15 @@ public class PlanExecute {
 //                emitter.complete();
 //            }
 //        });
-
+        //由于任务并行执行时会额外开启一次异步线程，所以需要传递一下线程上下文（本质将Web线程上下文传递到任务执行线程）
+        //获取当前线程的上下文
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        //获取当前线程的chatId
+        String chatId = BaseContent.getChatId();
+        //获取当前线程的登录用户
+        UserLoginDTO userLoginDTO = BaseContent.getUser();
+        //获取当前用户的会话记忆
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "\\" + BaseContent.getUser().getUserName() + "\\chatMemory");
 
         //对意图进行任务拆分
         if(!safeSendEventThink(emitter,"开始对任务进行拆分...\n")) return null;
@@ -205,10 +196,19 @@ public class PlanExecute {
                 for (int taskId : waveTaskIds) {
                     SubTask task = taskMap.get(taskId);
                     futures.add(CompletableFuture.runAsync(() -> {
+                        //将主线程上下文设置到当前线程上下文
+                        if(attributes != null){
+                            //主要用于获取主线程上下文，从而获取到Web请求线程（主线程）的HttpServletRequest的请求信息
+                            RequestContextHolder.setRequestAttributes(attributes);
+                        }
+                        //设置该线程的chatId
+                        BaseContent.setChatId(chatId);
+                        //设置当前异步线程的登录用户
+                        BaseContent.setUser(userLoginDTO);
                         long taskStart = System.currentTimeMillis();
                         log.info("[Phase] Starting subtask {}: {}", task.taskId(), task.taskName());
                         try {
-                            ToolCallback[] tools = getTools(task.toolName());
+                            ToolCallback[] tools = getTools(task.toolNames());
                             Kanodays88Manus kanodays88Manus = new Kanodays88Manus(tools, openAiChatModel);
                             safeSendEventThink(emitter, "开始执行任务【" + task.taskName() + "】\n");
                             //获取该任务对应所需的上游任务的结果
@@ -226,17 +226,22 @@ public class PlanExecute {
                             //蒸馏任务结果
                             long tDistill = System.currentTimeMillis();
                             DistilledResult distilledResult;
-                            if (shouldSkipDistill(task, result)) {
+                            if (result.length() < 2000) {
                                 distilledResult = new DistilledResult(task.taskId(), result, result, task);
                                 log.info("[Optimize] Skipped distill for task {} (already structured)", task.taskName());
                             } else {
-                                distilledResult = distillSubTaskResult(task, result, decomposedTasks.globalRequiredFields());
+                                distilledResult = distillSubTaskResult(task, result);
                             }
                             log.info("[Phase] Subtask {} distill took {} ms", task.taskId(), System.currentTimeMillis() - tDistill);
 
                             resultMap.put(task.taskId(), distilledResult);
                         } catch (Exception e) {
                             log.error("[Optimize] Subtask {} failed: {}", task.taskId(), e.getMessage());
+                        }finally {
+                            //删除ThreadLocal防止内存泄露
+                            BaseContent.removeChatId();
+                            //释放ThreadLocal
+                            RequestContextHolder.resetRequestAttributes();
                         }
                     }, executor));
                 }
@@ -252,7 +257,7 @@ public class PlanExecute {
                 .map(t -> resultMap.get(t.taskId()))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        String s = fuseResults(originalTask, orderedResults, decomposedTasks.globalRequiredFields());
+        String s = fuseResults(originalTask, orderedResults);
         log.info("[Phase] fuseResults took {} ms", System.currentTimeMillis() - tFuse);
         log.info("[Phase] TOTAL planExecute took {} ms", System.currentTimeMillis() - overallStart);
         return s;
@@ -276,23 +281,19 @@ public class PlanExecute {
     public DecomposedTasks decomposeTaskWithContract(String task) {
         BeanOutputConverter<DecomposedTasks> converter = new BeanOutputConverter<>(DecomposedTasks.class);
         String prompt = """
-            ##根据任务复杂度拆解为合适数量的子任务（0到5个）：
-            - 1个：任务极简单（如询问时间、打招呼等）
-            - 2个：中等复杂度任务
-            - 3到5个：复杂任务，按执行顺序拆分
             ##任务生成规则
             生成带依赖契约的结构化结果，严格遵守规则：
-            1. 先提取【全局强制留存字段】：基于用户的交付要求，提取所有最终交付必须用到的核心字段，所有子任务蒸馏时绝对不能删除；
-            2. 为每个子任务定义完整契约：
+            1. 为每个子任务定义完整契约：
                - taskId：子任务序号，从1开始递增
                - taskName：子任务名称
                - taskContent：子任务具体执行内容
                - downstreamTaskIds：所有会用到该子任务结果的下游任务的taskId（不止紧邻的下一个任务，必须覆盖所有下游依赖）
-               - requiredFields：所有下游任务要求该子任务必须输出的字段，蒸馏时绝对不能删除
-               - outputSchema：子任务输出结果的JSON Schema，必须包含所有requiredFields
-               - tools：子任务执行需要调用的工具
-            3. 子任务依赖关系必须清晰，确保所有下游需要的字段都被提前定义，不能出现下游需要的字段上游没输出的情况。
-            4. 工具信息只做任务划分参考，不得使用工具
+               - coreContent：所有下游任务要求该子任务必须输出的核心内容（比如图片链接，店铺地址等）
+               - toolNames：子任务执行需要调用的工具名称
+            2. 子任务依赖关系必须清晰，确保所有下游需要的核心内容提前定义，不能出现下游需要的内容上游没输出的情况。
+            3. 工具信息只做任务划分参考，不得使用工具
+            4. 不得生成无工具的任务
+            5. 生成任务不得带有总结类性质,fuseResult智能体会将所有子任务汇合总结展示给用户
 
             输出格式要求：{format}
             """;
@@ -312,8 +313,9 @@ public class PlanExecute {
     }
 
     /**
-     * Build execution waves from dependency graph (DAG topological sort).
-     * Wave 1 = tasks with no dependencies, Wave 2 = tasks depending on Wave 1, etc.
+     * 构建任务层，同一层任务可以并行执行
+     * @param subTasks
+     * @return
      */
     private List<Set<Integer>> buildExecutionWaves(List<SubTask> subTasks) {
         // dependsOn: for each task, which upstream taskIds it depends on
@@ -363,34 +365,37 @@ public class PlanExecute {
         return waves;
     }
 
+//    /**
+//     * 选取上游任务的蒸馏后结果，若有问题则提取原结果重新蒸馏
+//     * @param currentTask 当前任务
+//     * @param upstreamResults  上游任务列表
+//     * @return
+//     */
+//    private String checkAndFillUpstreamContext(SubTask currentTask, List<DistilledResult> upstreamResults) {
+//        StringBuilder context = new StringBuilder();
+//        // 没有上游依赖，直接返回空
+//        if (upstreamResults.isEmpty()) return "";
+//
+//        // 遍历所有上游结果，校验当前任务需要的字段是否完整
+//        for (DistilledResult upstreamResult : upstreamResults) {
+//            // 只处理当前任务依赖的上游任务
+//            if (!upstreamResult.subTask().downstreamTaskIds().contains(currentTask.taskId())) continue;
+//
+//            SubTask upstreamTask = upstreamResult.subTask();//获取上游任务
+//            Set<String> requiredFields = upstreamTask.requiredFields();
+//            String coreResult = upstreamResult.structuredCoreResult();
+//
+//            // 把校验后的上游核心结果加入上下文
+//            context.append("上游任务:").append(upstreamTask.taskContent()).append("\n核心结果:").append(coreResult).append("\n---\n");
+//        }
+//        return context.toString();
+//    }
+
     /**
-     * 选取上游任务的蒸馏后结果，若有问题则提取原结果重新蒸馏
+     * 选取上游任务结果
      * @param currentTask 当前任务
      * @param upstreamResults  上游任务列表
      * @return
-     */
-    private String checkAndFillUpstreamContext(SubTask currentTask, List<DistilledResult> upstreamResults) {
-        StringBuilder context = new StringBuilder();
-        // 没有上游依赖，直接返回空
-        if (upstreamResults.isEmpty()) return "";
-
-        // 遍历所有上游结果，校验当前任务需要的字段是否完整
-        for (DistilledResult upstreamResult : upstreamResults) {
-            // 只处理当前任务依赖的上游任务
-            if (!upstreamResult.subTask().downstreamTaskIds().contains(currentTask.taskId())) continue;
-
-            SubTask upstreamTask = upstreamResult.subTask();//获取上游任务
-            Set<String> requiredFields = upstreamTask.requiredFields();
-            String coreResult = upstreamResult.structuredCoreResult();
-
-            // 把校验后的上游核心结果加入上下文
-            context.append("上游任务:").append(upstreamTask.taskContent()).append("\n核心结果:").append(coreResult).append("\n---\n");
-        }
-        return context.toString();
-    }
-
-    /**
-     * Overloaded version that accepts a Map<Integer, DistilledResult> for parallel execution support.
      */
     private String checkAndFillUpstreamContext(SubTask currentTask, Map<Integer, DistilledResult> upstreamResults) {
         StringBuilder context = new StringBuilder();
@@ -407,25 +412,26 @@ public class PlanExecute {
         return context.toString();
     }
 
-    /**
-     * Determine whether a subtask result can skip LLM distillation.
-     * Returns true when the raw result is already valid JSON containing all required fields
-     * and is concise enough (<2000 chars), making further LLM distillation unnecessary.
-     */
-    private boolean shouldSkipDistill(SubTask task, String rawResult) {
-        try {
-            JsonNode json = new ObjectMapper().readTree(rawResult);
-            Set<String> required = task.requiredFields();
-            if (required != null && !required.isEmpty()) {
-                for (String field : required) {
-                    if (!json.has(field)) return false;
-                }
-            }
-            return rawResult.length() < 2000;
-        } catch (Exception e) {
-            return false;
-        }
-    }
+//    /**
+//     * Determine whether a subtask result can skip LLM distillation.
+//     * Returns true when the raw result is already valid JSON containing all required fields
+//     * and is concise enough (<2000 chars), making further LLM distillation unnecessary.
+//     */
+//    private boolean shouldSkipDistill(SubTask task, String rawResult) {
+//        try {
+//            //TODO
+//            JsonNode json = new ObjectMapper().readTree(rawResult);
+//            Set<String> required = task.coreContent();
+//            if (required != null && !required.isEmpty()) {
+//                for (String field : required) {
+//                    if (!json.has(field)) return false;
+//                }
+//            }
+//            return rawResult.length() < 2000;
+//        } catch (Exception e) {
+//            return false;
+//        }
+//    }
 
     /**
      * 任务蒸馏
@@ -434,16 +440,11 @@ public class PlanExecute {
      * @param globalRequiredFields 全局任务必须要求的字段
      * @return
      */
-    private DistilledResult distillSubTaskResult(SubTask subTask, String rawResult, Set<String> globalRequiredFields) {
+    private DistilledResult distillSubTaskResult(SubTask subTask, String rawResult) {
         String prompt = """
-            对用户输入的子任务的原始结果做定向蒸馏，严格遵守以下规则，违规直接输出无效：
-            1. 必须严格按照输出Schema输出纯JSON
-            2. 必须完整留存下游任务需要的所有字段：{requiredFields}
-            3. 全局强制留存字段，绝对不能删除：{globalRequiredFields}
-            4. 仅可删除冗余推理过程、无关描述、重复话术，不得修改任何核心数据；
-            5. 输出必须是纯JSON，不能有任何额外的解释、markdown格式、代码块标记。
-
-            输出Schema：{outputSchema}
+            对用户输入的子任务的原始结果做蒸馏，严格遵守以下规则，违规直接输出无效：
+            1. 不得删除下游任务需要的所有核心内容：{coreContent}
+            2. 删除所有与核心内容无关的内容
             """;
         String userPrompt = """
                 子任务名称：{taskName}
@@ -453,50 +454,29 @@ public class PlanExecute {
         // 结构化蒸馏，强制符合Schema，保证必填字段不丢
         String structuredCoreResult = chatClient.prompt()
                 .system(s -> s.text(prompt)
-                        .param("requiredFields", subTask.requiredFields())
-                        .param("globalRequiredFields", globalRequiredFields)
-                        .param("outputSchema",subTask.outputSchema()))
+                        .param("coreContent", subTask.coreContent()))
                 .user(u->u.text(userPrompt).param("taskName",subTask.taskName()).param("rawResult",rawResult))
                 .call()
                 .content();
-
-        // --- 新增校验降级逻辑 ---
-        String validatedResult;
-        try {
-            // 尝试清洗并解析 JSON
-            String cleaned = structuredCoreResult
-                    .replaceAll("```(?:json)?", "")  // 去除代码块标记
-                    .trim();
-            new ObjectMapper().readTree(cleaned);    // 仅校验合法性，不反序列化
-            validatedResult = cleaned;
-        } catch (Exception e) {
-            log.warn("蒸馏结果 JSON 校验失败，降级使用原始包装, task={}", subTask.taskName());
-            // 降级方案：将原始结果包裹在简单 JSON 中，确保下游不会收到纯文本
-            validatedResult = String.format(
-                    "{\"taskName\":\"%s\",\"rawFallback\":%s}",
-                    subTask.taskName(),
-                    JSONUtil.toJsonStr(rawResult)  // 需确保转义
-            );
-        }
-        return new DistilledResult(subTask.taskId(), validatedResult, rawResult, subTask);
+        return new DistilledResult(subTask.taskId(), structuredCoreResult, rawResult, subTask);
     }
 
     //整合结果集和意图，得到最终结果
-    private String fuseResults(String task, List<DistilledResult> subTaskResults, Set<String> globalRequiredFields) {
+    private String fuseResults(String task, List<DistilledResult> subTaskResults) {
         List<String> results = subTaskResults.stream().map(s -> s.structuredCoreResult()).collect(Collectors.toList());
         String prompt = """
+            {role}
             基于以下子任务的执行结果，整合成最终完整的任务报告返回给用户。
             不要遗漏任何子任务的关键结果。
             【核心目标】：{mainGoal}
-            【全局强制留存字段】：{globalFields}
             【子任务结果列表】：
             {subTaskResults}
             """;
 
         return chatClient.prompt()
                 .system(s -> s.text(prompt)
+                        .param("role",ChatSystem.CHAT_SYSTEM)
                         .param("mainGoal", task)
-                        .param("globalFields", String.join(", ", globalRequiredFields))
                         .param("subTaskResults", String.join("\n---\n", results)))
                 .call()
                 .content();

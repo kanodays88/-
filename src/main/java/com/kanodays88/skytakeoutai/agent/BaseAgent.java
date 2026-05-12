@@ -3,6 +3,7 @@ package com.kanodays88.skytakeoutai.agent;
 
 import com.itextpdf.styledxmlparser.jsoup.internal.StringUtil;
 import com.kanodays88.skytakeoutai.agent.model.AgentState;
+import com.kanodays88.skytakeoutai.agent.plan.SubTask;
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -70,7 +71,7 @@ public abstract class BaseAgent {
                 if(isStuck()){
                     handleStuckState();
                 }
-                //存储思考结果
+                //存储任务执行结果
                 results.add(result);
             }
             //如果循环思考步数大于最大步数，强制结束

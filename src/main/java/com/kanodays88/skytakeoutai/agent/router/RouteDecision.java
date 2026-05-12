@@ -17,6 +17,5 @@ public record RouteDecision(
         QuestionType questionType,      // 问题类型
         String reason,                  // 判定理由
         String returnQuestion,          // 要反问用户的问题，只当question为AMIGUOUS时有值
-        List<String> missingInfo,       // 缺失信息列表（AMIGUOUS时有值）
         String mianTask                 //总结出这次对话的总任务
 ) {}

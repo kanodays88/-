@@ -51,7 +51,7 @@ public class WebSearchTool {
 
         // 自定义分片参数（搜索场景推荐配置）
         this.textSplitter = TokenTextSplitter.builder()
-                .withChunkSize(300)                    // 每个块最大300 token（搜索场景推荐小一点）
+                .withChunkSize(600)                    // 每个块最大300 token（搜索场景推荐小一点）
                 .withMinChunkSizeChars(50)             // 最小截断字符数（从标点符号截断的阈值）
                 .withMinChunkLengthToEmbed(20)         // 丢弃小于20字符的块
                 .withMaxNumChunks(50)                 // 单个文本最多生成50个块

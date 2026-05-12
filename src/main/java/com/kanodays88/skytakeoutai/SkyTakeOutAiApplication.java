@@ -1,6 +1,10 @@
 package com.kanodays88.skytakeoutai;
 
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -8,7 +12,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+        OpenAiAudioSpeechAutoConfiguration.class,      // 语音合成
+        OpenAiAudioTranscriptionAutoConfiguration.class, // 语音转文字
+        OpenAiImageAutoConfiguration.class,            // 图像生成
+        OpenAiModerationAutoConfiguration.class        // 内容审核
+})
 @MapperScan("com.kanodays88.skytakeoutai.mapper")
 public class SkyTakeOutAiApplication {
 

@@ -17,7 +17,7 @@ public class Kanodays88Manus extends ToolCallAgent{
         //设置智能体名字
         this.setName("kanodays88Manus");
         //设置最大执行步数
-        this.setMaxSteps(3);
+        this.setMaxSteps(10);
 //        //设置系统提示词
 //        String SYSTEM_PROMPT = """
 //                你是Kanodays88Manus，全能AI助手，可解决用户任何任务。具备多种工具，能高效处理复杂请求。

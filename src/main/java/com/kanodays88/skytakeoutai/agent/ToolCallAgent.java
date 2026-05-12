@@ -2,6 +2,7 @@ package com.kanodays88.skytakeoutai.agent;
 
 import cn.hutool.core.collection.CollUtil;
 import com.kanodays88.skytakeoutai.agent.model.AgentState;
+import com.kanodays88.skytakeoutai.agent.plan.SubTask;
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -64,11 +65,12 @@ public class ToolCallAgent extends ReActAgent{
         try {
             //更新设置系统提示词
             String SYSTEM_PROMPT = """
-                    角色：专注完成当前任务的AI助手
+                    角色：使用工具专注完成当前任务的AI助手
                     核心规则：
-                    1. 仅使用提供的工具完成当前任务，不要多余思考
-                    2. 任务完成或无法继续时，调用assignmentFinish工具
+                    1. 结合历史对话且只能使用提供的工具完成当前任务
+                    2. 当判断任务完成或无法继续时，立即调用assignmentFinish工具
                     3. 当前剩余思考次数：{now} / {max} ;你需要在思考次数耗尽时尽可能完成任务
+                    4. 仅可输出调用工具的信息，不得输出其他结论
                     当前任务：{question}
                 """;
             PromptTemplate promptTemplate = new PromptTemplate(SYSTEM_PROMPT);
@@ -85,12 +87,19 @@ public class ToolCallAgent extends ReActAgent{
             this.toolCallChatResponse = chatResponse;
             //获取大模型返回的消息
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
-            //通过SseEmitter将大模型思考过程发送给用户
+            //获取模型思考过程
+            String reasoning = (String) assistantMessage.getMetadata().get("reasoningContent");
+            //发送思考过程给用户
+            SSESend.sendEventThink(sseEmitter,reasoning);
+            //通过SseEmitter将大模型思考结果发送给用户
             SSESend.sendEventThink(sseEmitter,assistantMessage.getText());
+
+//            //对思考模式的模型修复，api调用需要记忆中夹带reasoning_content字段的思考过程
+//            if (reasoning != null) messages.add(new AssistantMessage(msg.getContent() + "\n" + reasoning, msg.getToolCalls()));
 
             //大模型思考结果的调用工具消息
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
-            log.info(getName() + "的思考: " + (String) assistantMessage.getMetadata().get("reasoningContent"));//获取思考过程
+            log.info(getName() + "的思考: " + reasoning);
             log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
             //获取工具参数信息
             String toolCallInfo = toolCallList.stream()
@@ -125,6 +134,27 @@ public class ToolCallAgent extends ReActAgent{
         Prompt prompt = new Prompt(getMessageList(), chatOptions);
         //根据上下文记忆信息和工具调用信息调用工具，然后将所有上下文信息连同工具调用信息一起集成到toolExecutionResult.conversationHistory()
         ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
+        // 在 act() 方法中，executeToolCalls() 之后：
+        List<Message> history = toolExecutionResult.conversationHistory();
+        // 找到刚刚添加的 AssistantMessage（带 tool_calls 的那条）
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if (history.get(i) instanceof AssistantMessage am) {
+                Object rc = am.getMetadata().get("reasoningContent");
+                if (rc instanceof String reasoning && !reasoning.isEmpty()) {
+                    String text = am.getText();
+                    if (text == null) text = "";
+                    // 将 reasoning 嵌入文本，保证序列化时不被丢掉
+                    AssistantMessage enriched = AssistantMessage.builder()
+                            .content(text + "\n" + reasoning)
+                            .toolCalls(am.getToolCalls())
+                            .properties(am.getMetadata())
+                            .build();
+                    history.set(i, enriched);
+                }
+                break;
+            }
+        }
+
         //将集成的记忆信息覆盖原有的信息
         setMessageList(toolExecutionResult.conversationHistory());
 

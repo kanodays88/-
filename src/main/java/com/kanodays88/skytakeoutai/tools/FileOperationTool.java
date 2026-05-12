@@ -20,7 +20,7 @@ public class FileOperationTool {
      */
     @Tool(description = "Read content from a file")
     public String readFile(@ToolParam(description = "Name of the file to read") String fileName) {
-        String fileDir = FileConstant.FILE_SAVE_DIR + "/"+ BaseContent.getChatId()+ "/file";
+        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
         String filePath = fileDir + "/" + fileName;
         try {
             return FileUtil.readUtf8String(filePath);
@@ -39,7 +39,7 @@ public class FileOperationTool {
     public String writeFile(
             @ToolParam(description = "Name of the file to write") String fileName,
             @ToolParam(description = "Content to write to the file") String content) {
-        String fileDir = FileConstant.FILE_SAVE_DIR + "/"+ BaseContent.getChatId()+ "/file";
+        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
         String filePath = fileDir + "/" + fileName;
         try {
 

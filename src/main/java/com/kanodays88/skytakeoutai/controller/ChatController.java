@@ -9,6 +9,7 @@ import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import com.kanodays88.skytakeoutai.common.ChatDecide;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.content.BaseContent;
+import com.kanodays88.skytakeoutai.entity.dto.UserLoginDTO;
 import com.kanodays88.skytakeoutai.memory.FileBasedChatMemory;
 import com.kanodays88.skytakeoutai.skill.SkillRegistry;
 import com.kanodays88.skytakeoutai.utils.CommonUtils;
@@ -32,6 +33,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -72,56 +74,17 @@ public class ChatController {
     private static final String CHAT_RAG_STATIC = "chat:ragStatic:";
     @Autowired
     private KotlinCoroutinesReturnTypeParser kotlinCoroutinesReturnTypeParser;
-//
-//    @RequestMapping(value = "/{msg}", produces = "text/html;charset=utf-8")
-//    public Flux<String> serviceChat(@PathVariable("msg") String msg, @RequestHeader("chatId") String chatId){
-//        //判断之前的对话有没有走rag
-//        boolean ragStatic = commonUtils.writeChatCache(CHAT_RAG_STATIC, chatId, msg);
-//        //判断这次提问该不该走向量数据库
-//        boolean rag = chatDecide.chatDecideRAG(msg);
-//
-//        if(ragStatic == false && rag == false){
-//            //之前对话没有走rag，并且此次提问也没有走rag
-//            return chatClient.prompt(msg).stream().content();
-//        }
-//        else{
-//            if(ragStatic == false){
-//                commonUtils.setChatCache(CHAT_RAG_STATIC+chatId,msg,true);
-//            }
-//            SearchRequest searchRequest = SearchRequest.builder()
-//                    .query("初始问题："+commonUtils.getChatCache(CHAT_RAG_STATIC+chatId)+";当前问题："+msg) //搜索文本
-//                    .topK(2) //只返回最相关的前2个向量数据
-//                    //            .filterExpression("file_name == '菜品口味表.pdf'") //元数据过滤，只搜索指定文件的数据
-//                    .build();
-//            //将文本发送到向量数据库，向量数据库会根据向量模型的计算结果匹配近似文本
-//            List<Document> documents = vectorStore.similaritySearch(searchRequest);
-//            //将从向量数据库读取的内容转为字符串
-//            String context = documents.stream().map(d->d.getText()).collect(Collectors.joining("\n"));
-//
-//            String defaultSystem = """
-//                    %s
-//
-//                    【额外资料】
-//                    %s
-//
-//                    注意：额外资料仅用于回答相关问题，不影响你处理其他类型的问题。
-//                    """.formatted(ChatSystem.CHAT_SYSTEM,context);
-//
-//            return chatClient.prompt(msg).system(defaultSystem).stream().content();
-//        }
-//    }
 
     @RequestMapping(value = "/{msg}",produces = "text/event-stream;charset=UTF-8")
     public SseEmitter serviceChat(@PathVariable("msg") String msg, @RequestHeader("chatId") String chatId){
-        //TODO 优化RAG
         //获取当前主线程的上下文
         RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
         // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
         SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+        //获取当前线程的登录用户
+        UserLoginDTO userLoginDTO = BaseContent.getUser();
         CompletableFuture.runAsync(()->{
             try{
-                //获取记忆系统
-                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
                 //将主线程上下文设置到子线程中
                 if (attributes != null) {
                     //主要用于获取主线程上下文，从而获取到Web请求线程（主线程）的HttpServletRequest的请求信息
@@ -129,6 +92,10 @@ public class ChatController {
                 }
                 //将会话id存储到当前线程的ThreadLocal
                 BaseContent.setChatId(chatId);
+                //设置当前异步线程的登录用户
+                BaseContent.setUser(userLoginDTO);
+                //获取记忆系统
+                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
                 //进入RouterAgent
                 RouterAgent routerAgent = new RouterAgent(openAiChatModel, vectorStore, allTools, skillRegistry,emitter);
                 //获取路由结果
@@ -173,26 +140,26 @@ public class ChatController {
 
     @GetMapping("/history")
     public String[] historyQuery(){
-        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(FileConstant.FILE_SAVE_DIR + "/chatMemory");
+        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
         return filenamesWithoutExtension;
     }
 
     @GetMapping("/history/{chatId}")
-    public List<String> historyQueryByChatId(@PathVariable("chatId") String chatId){
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
+    public List<String> historyQueryByChatId(@PathVariable("chatId") String chatId) throws IOException {
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
         List<Message> allMemory = fileBasedChatMemory.getAll(chatId);
         return allMemory.stream().map(m->m.getMessageType()+":"+m.getText()).collect(Collectors.toList());
     }
 
     @DeleteMapping("/history/remove/{chatId}")
-    public String historyRemove(@PathVariable("chatId") String chatId){
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
+    public String historyRemove(@PathVariable("chatId") String chatId) throws IOException {
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
         try{
             fileBasedChatMemory.clear(chatId);
-            File file = new File(FileConstant.FILE_SAVE_DIR + "/" + chatId);
+            File file = new File(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+chatId);
             if(file.exists() && file.isDirectory()){
                 //文件存在删除
-                FileUtils.deleteDirectory(new File(FileConstant.FILE_SAVE_DIR + "/"+chatId));
+                FileUtils.deleteDirectory(file);
             }else{
                 log.info("指定文件目录：{}不存在",file.getPath());
             }

@@ -55,7 +55,7 @@ public class PDFGenerationTool {
             Map.entry("Tahoma", "tahoma.ttf")
     );
 
-    @Tool(description = "生成PDF工具，支持自定义字体和插入图片，默认字体为STSongStd-Light,返回值是pdf文件的路径")
+    @Tool(description = "生成PDF工具，支持插入图片，推荐默认字体为STSongStd-Light,返回值是pdf文件的路径,不能使用emoji")
     public String generatePDF(
             @ToolParam(description = "PDF文件名，如 report.pdf") String fileName,
             @ToolParam(description = "PDF文本内容") String content,
@@ -65,7 +65,7 @@ public class PDFGenerationTool {
         if (fileName == null || fileName.isBlank()) return "Error: File name is required.";
         if (content == null) return "Error: Content cannot be null.";
 
-        String fileDir = FileConstant.FILE_SAVE_DIR + "/"+BaseContent.getChatId()+ "/file";
+        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
         String filePath = fileDir + "/" + fileName;
         try {
             FileUtil.mkdir(fileDir);

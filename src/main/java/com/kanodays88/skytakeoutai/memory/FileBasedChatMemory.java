@@ -3,6 +3,8 @@ package com.kanodays88.skytakeoutai.memory;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import jodd.io.FileUtil;
+import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
@@ -31,12 +33,12 @@ public class FileBasedChatMemory implements ChatMemory {
         kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
     }
 
-    public FileBasedChatMemory(String path){
+    public FileBasedChatMemory(String path) throws IOException {
         BASE_DIR = path;//指定文件创建路径
         File file = new File(path);
         if(!file.exists()){
             //如果文件不存在，先创建文件
-            file.mkdir();
+            FileUtil.mkdir(file);
         }
     }
 

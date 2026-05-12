@@ -25,12 +25,17 @@ spring:
 
   ai:
     openai:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
-      api-key: ${API_KEY}
       chat:
+        base-url: https://api.deepseek.com
+        api-key: ${DEEPSEEK_API_KEY}
         options:
-          model: deepseek-v4-pro
+          model: deepseek-v4-flash
+          extra-body:
+            thinking:
+              type: disabled
       embedding:
+        base-url: https://dashscope.aliyuncs.com/compatible-mode
+        api-key: ${API_KEY}
         options:
           model: text-embedding-v2  #向量模型
           dimensions: 1024   #向量维数

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kanodays88.skytakeoutai.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="com.kanodays88.skytakeoutai.entity.User">
+            <id property="id" column="id" />
+            <result property="openid" column="openid" />
+            <result property="name" column="name" />
+            <result property="phone" column="phone" />
+            <result property="sex" column="sex" />
+            <result property="idNumber" column="id_number" />
+            <result property="avatar" column="avatar" />
+            <result property="createTime" column="create_time" />
+            <result property="deleteId" column="delete_id" />
+            <result property="version" column="version" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,openid,name,phone,sex,id_number,
+        avatar,create_time,delete_id,version
+    </sql>
+</mapper>

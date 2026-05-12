@@ -22,6 +22,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -34,10 +35,10 @@ public class RouterAgent {
     private final SkillRegistry skillRegistry;
     private final SseEmitter sseEmitter;
 
-    public RouterAgent(OpenAiChatModel model, VectorStore vectorStore, ToolCallback[] allTools, SkillRegistry skillRegistry, SseEmitter sseEmitter){
+    public RouterAgent(OpenAiChatModel model, VectorStore vectorStore, ToolCallback[] allTools, SkillRegistry skillRegistry, SseEmitter sseEmitter) throws IOException {
         this.chatClient = ChatClient.builder(model).defaultAdvisors(new MyLoggerAdvisor()).build();
         this.vectorStore = vectorStore;
-        this.chatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "/chatMemory");
+        this.chatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
         this.allTools = allTools;
         this.skillRegistry = skillRegistry;
         this.sseEmitter = sseEmitter;
@@ -75,8 +76,6 @@ public class RouterAgent {
 
     private RouteDecision llmClassify(String prompt, String conversationId, String skillContext) {
         String history = buildHistoryContext(conversationId);
-//        //合并rag知识问答结果
-//        String ragContent = ragResult.stream().map(r -> r.getText()).collect(Collectors.joining("\n"));
 
         BeanOutputConverter<ClassifyResult> converter = new BeanOutputConverter<>(ClassifyResult.class);
         String systemPrompt = """
@@ -97,19 +96,12 @@ public class RouterAgent {
                      - 多个技能匹配时，优先选择与用户输入语义最相关、信息最充分的技能作为主任务依据
                  2. 如果没有匹配到任何业务技能，但解决该问题需要使用2种及以上工具 → COMPLEX_TASK
                  3. 如果没有匹配到任何业务技能，且结合历史对话和用户问题（无历史会话就单独判断用户问题）判断该问题模糊不清、语义不明确 → AMBIGUOUS
-                 4. 以上都不符合 → SIMPLE_CHAT
-    
-                 【参数检查说明】
-                 - 不要机械匹配参数名称，应根据业务流程的实际执行逻辑判断哪些信息是当前步骤必需的
-                 - 用户可能使用同义词或口语化表达，请按语义理解匹配
-                 - 历史对话中用户已明确提供的信息，视为已提供的参数
-                 - 缺失的信息必须是具体、可直接回答的单点信息，不得使用模糊表述
+                 4. 如果只需用到一个工具，或者简单任务，或者能够从历史对话中找到答案 → SIMPLE_CHAT
     
                  【输出参数说明】
                  questionType: 问题分类的结果，只能是COMPLEX_TASK / AMBIGUOUS / SIMPLE_CHAT三者之一
                  reason: 详细的判断理由，需明确说明匹配到的业务技能（如有）、信息充分性判断依据或问题模糊的具体原因
                  returnQuestion: 反问用户的问题（只有当questionType为AMBIGUOUS才会有内容，否则为空字符串）
-                 missingInfo: 缺失的信息列表（只有当questionType为AMBIGUOUS才会有内容，否则为空数组）
                  mainTask: 详细总任务：
                      - 如果有业务技能，必须严格按照该技能的业务流程描述撰写
                      - 如果未匹配到业务技能但为COMPLEX_TASK，需明确说明核心任务和需要用到的工具
@@ -117,6 +109,9 @@ public class RouterAgent {
     
                  【输出要求】
                  严格按照以下JSON格式输出，不得包含任何额外的解释、说明或markdown内容：
+                 JSON格式里的内容不得使用双引号：
+                    错误案例："Content":"用户的名字叫"五条五""
+                    正确案例："Content":"用户的名字叫五条五"
                  {format}
                 """;
 
@@ -139,7 +134,7 @@ public class RouterAgent {
                 .entity(converter);
 
         if (result == null) {
-            return new RouteDecision(QuestionType.SIMPLE_CHAT, "LLM分类失败，默认简单对话",null, null,userContent);
+            return new RouteDecision(QuestionType.SIMPLE_CHAT, "LLM分类失败，默认简单对话",null,userContent);
         }
 
         QuestionType type;
@@ -149,10 +144,10 @@ public class RouterAgent {
             type = QuestionType.SIMPLE_CHAT;
         }
 
-        return new RouteDecision(type, result.reason(), result.returnQuestion,result.missingInfo(),result.mainTask());
+        return new RouteDecision(type, result.reason(), result.returnQuestion,result.mainTask());
     }
 
-    private record ClassifyResult(String questionType, String reason, String returnQuestion,List<String> missingInfo,String mainTask) {}
+    private record ClassifyResult(String questionType, String reason, String returnQuestion,String mainTask) {}
     private record SkillSelection(List<String> skillNames) {}
 
     private List<String> selectSkillsWithLLM(String userPrompt) {
