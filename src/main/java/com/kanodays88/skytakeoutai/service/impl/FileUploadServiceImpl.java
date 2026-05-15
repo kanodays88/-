@@ -40,6 +40,8 @@ public class FileUploadServiceImpl implements FileUploadService {
         File target = new File(FileConstant.FILE_SAVE_DIR+"\\"+ BaseContent.getUser().getUserName()+"\\"+chatId+"\\"+Objects.requireNonNull(filename));
         if (!target.exists()) {
             try {
+                // 2. 关键修复：创建所有不存在的父目录
+                Files.createDirectories(target.toPath().getParent());
                 Files.copy(resource.getInputStream(), target.toPath());
             } catch (IOException e) {
                 log.error("Failed to save PDF resource.", e);

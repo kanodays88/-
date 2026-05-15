@@ -197,6 +197,10 @@ public class ChatController {
 
         CompletableFuture.runAsync(()->{
             try{
+                //将会话id存储到当前线程的ThreadLocal
+                BaseContent.setChatId(chatId);
+                //设置当前异步线程的登录用户
+                BaseContent.setUser(userLoginDTO);
                 //获取记忆系统
                 FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "\\" + BaseContent.getUser().getUserName() + "\\chatMemory");
 
@@ -215,7 +219,6 @@ public class ChatController {
                                 .query(userMessage)
                                 .filterExpression(expression)
                                 .topK(5)
-                                .similarityThreshold(0.5)
                                 .build()
                 );
                 //将ragDocument拼接成字符串
@@ -224,7 +227,7 @@ public class ChatController {
 
                 //拼接提示词
                 String userPrompt = """
-                ##根据额外信息回答用户提问
+                ##根据额外信息回答用户提问，当没有额外信息时，提醒用户没有上传pdf文件
                 【用户提问】
                 {userMessage}
                 【额外信息】
