@@ -12,6 +12,7 @@ import com.kanodays88.skytakeoutai.entity.vo.DishVO;
 import com.kanodays88.skytakeoutai.entity.vo.SetmealVO;
 import com.kanodays88.skytakeoutai.service.CategoryService;
 import com.kanodays88.skytakeoutai.service.DishService;
+import com.kanodays88.skytakeoutai.utils.HttpPathUtil;
 import lombok.NonNull;
 import org.redisson.Redisson;
 import org.redisson.api.RLock;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Component
 public class DishTool {
@@ -103,9 +105,15 @@ public class DishTool {
                     //上锁成功
                     //执行查询
                     List<DishVO> dishVOS = getDishVOS(dishQuery);
+                    //补充图片url
+                    List<DishVO> dishVOList = dishVOS.stream().map(s -> {
+                                s.setImage(HttpPathUtil.writeHttpUrl("/upload/" + s.getImage()));
+                                return s;
+                            }
+                    ).collect(Collectors.toList());
                     //将结果缓存
                     //生成json
-                    String strJson = JSONUtil.toJsonStr(dishVOS);
+                    String strJson = JSONUtil.toJsonStr(dishVOList);
                     //缓存
                     stringRedisTemplate.opsForValue().set(key,strJson);
                     return dishVOS;

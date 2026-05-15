@@ -3,24 +3,40 @@ package com.kanodays88.skytakeoutai.config;
 import com.kanodays88.skytakeoutai.tools.*;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ToolRegistration {
 
+    @Autowired
+    private AssignmentFinishTool assignmentFinishTool;
+    @Autowired
+    private DishTool dishTool;
+    @Autowired
+    private FileOperationTool fileOperationTool;
+    @Autowired
+    private LoadReferenceTool loadReferenceTool;
+    @Autowired
+    private OrderTool orderTool;
+    @Autowired
+    private PDFGenerationTool pdfGenerationTool;
+    @Autowired
+    private ResourceDownloadTool resourceDownloadTool;
+    @Autowired
+    private SetmealTool setmealTool;
+    @Autowired
+    private TimeTool timeTool;
+    @Autowired
+    private WebSearchTool webSearchTool;
+
     /**
      * 工厂模式统一注册工具
      * @return
      */
     @Bean
-    public ToolCallback[] allTools(WebSearchTool webSearchTool,DishTool dishTool,SetmealTool setmealTool,OrderTool orderTool){
-        AssignmentFinishTool assignmentFinishTool = new AssignmentFinishTool();
-        FileOperationTool fileOperationTool = new FileOperationTool();
-        PDFGenerationTool pdfGenerationTool = new PDFGenerationTool();
-        ResourceDownloadTool resourceDownloadTool = new ResourceDownloadTool();
-        WebScrapingTool webScrapingTool = new WebScrapingTool();
-        TimeTool timeTool = new TimeTool();
+    public ToolCallback[] allTools(){
         return ToolCallbacks.from(
                 dishTool,
                 orderTool,

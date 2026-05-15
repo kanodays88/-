@@ -12,6 +12,7 @@ import com.kanodays88.skytakeoutai.entity.vo.SetmealVO;
 import com.kanodays88.skytakeoutai.service.CategoryService;
 import com.kanodays88.skytakeoutai.service.SetmealDishService;
 import com.kanodays88.skytakeoutai.service.SetmealService;
+import com.kanodays88.skytakeoutai.utils.HttpPathUtil;
 import com.kanodays88.skytakeoutai.utils.RedisUtils;
 import lombok.NonNull;
 import org.redisson.Redisson;
@@ -136,9 +137,14 @@ public class SetmealTool {
                     //上锁成功
                     //执行查询
                     List<SetmealVO> setmealVOS = getSetmealVOS(setmealQuery);
+                    //补充图片url
+                    List<SetmealVO> setmealVOList = setmealVOS.stream().map(s -> {
+                        s.setImage(HttpPathUtil.writeHttpUrl("/upload/" + s.getImage()));
+                        return s;
+                    }).toList();
                     //将结果缓存
                     //生成json
-                    String strJson = JSONUtil.toJsonStr(setmealVOS);
+                    String strJson = JSONUtil.toJsonStr(setmealVOList);
                     //缓存
                     stringRedisTemplate.opsForValue().set(key,strJson);
                     return setmealVOS;

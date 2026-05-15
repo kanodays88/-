@@ -44,7 +44,7 @@ public class WebSearchTool {
     // ========== 注入Spring AI 标准组件（千问Embedding自动适配） ==========
     private final EmbeddingModel qianfanEmbeddingModel;
     // Spring AI 内置token分块器（和你本地知识库用的完全一样）
-    private TokenTextSplitter textSplitter = new TokenTextSplitter();
+    private final TokenTextSplitter textSplitter;
 
     public WebSearchTool(EmbeddingModel qianfanEmbeddingModel) {
         this.qianfanEmbeddingModel = qianfanEmbeddingModel;

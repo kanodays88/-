@@ -1,5 +1,7 @@
 package com.kanodays88.skytakeoutai.controller;
 
+import cn.hutool.json.JSONUtil;
+import com.kanodays88.skytakeoutai.agent.Kanodays88Manus;
 import com.kanodays88.skytakeoutai.agent.plan.PlanExecute;
 import com.kanodays88.skytakeoutai.agent.router.QuestionType;
 import com.kanodays88.skytakeoutai.agent.router.RouteDecisionTotal;
@@ -7,6 +9,7 @@ import com.kanodays88.skytakeoutai.agent.router.RouterAgent;
 import com.kanodays88.skytakeoutai.agent.simpleChat.SimpleChatAgent;
 import com.kanodays88.skytakeoutai.agent.sse.SSESend;
 import com.kanodays88.skytakeoutai.common.ChatDecide;
+import com.kanodays88.skytakeoutai.common.ChatSystem;
 import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.content.BaseContent;
 import com.kanodays88.skytakeoutai.entity.dto.UserLoginDTO;
@@ -21,10 +24,16 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +43,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -123,6 +134,11 @@ public class ChatController {
                 }
                 //本次会话执行完成后，将用户提问和ai回复存入对话记忆
                 fileBasedChatMemory.add(chatId,List.of(new UserMessage(msg),new AssistantMessage(aiResult)));
+                //刷新或建立该会话记忆的寿命
+                String chatMemoryCache = "chatMemory:"+BaseContent.getUser().getUserName()+":"+chatId;
+                stringRedisTemplate.opsForValue().set(chatMemoryCache,JSONUtil.toJsonStr(LocalDateTime.now().plusHours(24)));
+                //同时维护一个redis的Set集合，存储所有后续需要清除的chatMemory
+                stringRedisTemplate.opsForSet().add("remove:chatMemory",chatMemoryCache);
             }catch (Exception e){
                 log.error("执行异常：{}",e.getMessage());
                 SSESend.sendEventResult(emitter, "执行失败: " + e.getMessage());
@@ -170,20 +186,104 @@ public class ChatController {
         }
     }
 
+    @RequestMapping(value = "/rag/{msg}",produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter rag(@PathVariable("msg") String userMessage,@RequestHeader("chatId") String chatId) throws IOException {
+        //获取当前主线程的上下文
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        // 1. 创建SSE发射器，设置10分钟超时（根据任务复杂度调整）
+        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
+        //获取当前线程的登录用户
+        UserLoginDTO userLoginDTO = BaseContent.getUser();
 
-//    @RequestMapping("/finish")
-//    public void finishRag(@RequestBody Map<String,String> map ,@RequestHeader("chatId") String chatId){
-//        String msg = map.get("msg");
-//        boolean b = commonUtils.writeChatCache(CHAT_RAG_STATIC, chatId, msg);
-//        if(b == true){
-//            //获取原始问题
-//            String s = commonUtils.getChatCache(CHAT_RAG_STATIC + chatId);
-//            boolean end = chatDecide.chatDecideRAGEnd(s, msg);
-//
-//            if(end == true){
-//                //结束RAG锁
-//                commonUtils.setChatCache(CHAT_RAG_STATIC+chatId,"",false);
-//            }
-//        }
-//    }
+        CompletableFuture.runAsync(()->{
+            try{
+                //获取记忆系统
+                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "\\" + BaseContent.getUser().getUserName() + "\\chatMemory");
+
+                SSESend.sendEventThink(emitter,"开始获取pdf文档关联内容");
+                //rag问答
+                //根据用户提问，从向量数据库找5个最相关的切片
+                // 构建过滤表达式：只保留documentId在允许列表中的文档，傻呗写法四老冯了
+                FilterExpressionBuilder filter = new FilterExpressionBuilder();
+                FilterExpressionBuilder.Op eqUser = filter.eq("user", BaseContent.getUser().getUserName());
+                FilterExpressionBuilder.Op eqChatId = filter.eq("chat_id", chatId);
+                Filter.Expression expression = filter.and(eqUser, eqChatId).build();
+                //上面是我见过最四老冯的写法
+
+                List<Document> ragDocuments = vectorStore.similaritySearch(
+                        SearchRequest.builder()
+                                .query(userMessage)
+                                .filterExpression(expression)
+                                .topK(5)
+                                .similarityThreshold(0.5)
+                                .build()
+                );
+                //将ragDocument拼接成字符串
+                String ragContent = ragDocuments.stream().map(d -> d.getText()).collect(Collectors.joining("\n---\n"));
+                SSESend.sendEventThink(emitter,"获取成功：\n"+ragContent);
+
+                //拼接提示词
+                String userPrompt = """
+                ##根据额外信息回答用户提问
+                【用户提问】
+                {userMessage}
+                【额外信息】
+                {ragDocuments}
+                """;
+                PromptTemplate promptTemplate = new PromptTemplate(userPrompt);
+                Prompt prompt = promptTemplate.create(Map.of("role", ChatSystem.CHAT_SYSTEM, "userMessage", userMessage, "ragDocuments", ragContent));
+
+                SimpleChatAgent simpleChatAgent = new SimpleChatAgent(openAiChatModel, allTools);
+                String simpleChat = simpleChatAgent.simpleChat(prompt.getContents(), chatId);
+                SSESend.sendEventResult(emitter,simpleChat);
+                //将对话添加到记忆
+                fileBasedChatMemory.add(chatId,List.of(new UserMessage(userMessage),new AssistantMessage(simpleChat)));
+                //刷新或建立该会话记忆的寿命
+                String chatMemoryCache = "chatMemory:"+BaseContent.getUser().getUserName()+":"+chatId;
+                stringRedisTemplate.opsForValue().set(chatMemoryCache,JSONUtil.toJsonStr(LocalDateTime.now().plusHours(24*3)));
+                //同时维护一个redis的Set集合，存储所有后续需要清除的chatMemory
+                stringRedisTemplate.opsForSet().add("remove:chatMemory",chatMemoryCache);
+
+            }catch (Exception e){
+                log.error("执行异常：{}",e.getMessage());
+                SSESend.sendEventResult(emitter, "执行失败: " + e.getMessage());
+                emitter.completeWithError(e);
+            }finally {
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
