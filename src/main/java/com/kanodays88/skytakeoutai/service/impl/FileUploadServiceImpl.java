@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -37,7 +38,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     public boolean save(String chatId, Resource resource) {
         // 1.保存到本地磁盘
         String filename = resource.getFilename();//获取文件名字
-        File target = new File(FileConstant.FILE_SAVE_DIR+"\\"+ BaseContent.getUser().getUserName()+"\\"+chatId+"\\"+Objects.requireNonNull(filename));
+        File target = new File(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),chatId,Objects.requireNonNull(filename)).toString());
         if (!target.exists()) {
             try {
                 // 2. 关键修复：创建所有不存在的父目录

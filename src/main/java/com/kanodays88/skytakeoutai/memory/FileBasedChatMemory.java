@@ -23,15 +23,25 @@ public class FileBasedChatMemory implements ChatMemory {
 
     private final int lastN = 10;//获取的记忆数
 
-    //kryo序列化库
-    private static final Kryo kryo = new Kryo();
+//    //kryo序列化库
+//    private static final Kryo kryo = new Kryo();
+//
+//    static {
+//        //取消手动实例化策略
+//        kryo.setRegistrationRequired(false);
+//        //采用自动序列化策略
+//        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
+//    }
 
-    static {
+    //withInitial方法会预加载目标类的初始化方法，等到线程第一次调用get获取目标类对象时，自动执行初始化方法获取目标类对象
+    private static final ThreadLocal<Kryo> kryoThreadLocal = ThreadLocal.withInitial(() -> {
+        Kryo kryo = new Kryo();
         //取消手动实例化策略
         kryo.setRegistrationRequired(false);
         //采用自动序列化策略
         kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
-    }
+        return kryo;
+    });
 
     public FileBasedChatMemory(String path) throws IOException {
         BASE_DIR = path;//指定文件创建路径
@@ -81,7 +91,7 @@ public class FileBasedChatMemory implements ChatMemory {
         if (file.exists()) {
             try (Input input = new Input(new FileInputStream(file))) {
                 //由于kryo在序列化时将写入信息的类型也一并写入，所以取出反序列化时也会有类型的信息，自然能够识别出List<Message>而不是List<Object>
-                messages = kryo.readObject(input, ArrayList.class);
+                messages = kryoThreadLocal.get().readObject(input, ArrayList.class);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -102,7 +112,7 @@ public class FileBasedChatMemory implements ChatMemory {
             //递归遍历对象图：分析 messages 列表本身，以及列表里每个 Message 对象的内部字段（如 String content、long timestamp 等）。
             //生成二进制字节：根据对象的【类型信息】和字段值，生成极其紧凑的二进制字节流（比 Java 原生序列化体积小很多）。
             //写入流中：将生成的字节流通过 Output → FileOutputStream 层层传递，最终写入磁盘文件。
-            kryo.writeObject(output, messages);
+            kryoThreadLocal.get().writeObject(output, messages);
         } catch (IOException e) {
             e.printStackTrace();
         }

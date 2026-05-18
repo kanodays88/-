@@ -43,6 +43,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +107,7 @@ public class ChatController {
                 //设置当前异步线程的登录用户
                 BaseContent.setUser(userLoginDTO);
                 //获取记忆系统
-                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
+                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
                 //进入RouterAgent
                 RouterAgent routerAgent = new RouterAgent(openAiChatModel, vectorStore, allTools, skillRegistry,emitter);
                 //获取路由结果
@@ -156,23 +157,23 @@ public class ChatController {
 
     @GetMapping("/history")
     public String[] historyQuery(){
-        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
+        String[] filenamesWithoutExtension = FileScanUtils.getFilenamesWithoutExtension(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
         return filenamesWithoutExtension;
     }
 
     @GetMapping("/history/{chatId}")
     public List<String> historyQueryByChatId(@PathVariable("chatId") String chatId) throws IOException {
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
         List<Message> allMemory = fileBasedChatMemory.getAll(chatId);
         return allMemory.stream().map(m->m.getMessageType()+":"+m.getText()).collect(Collectors.toList());
     }
 
     @DeleteMapping("/history/remove/{chatId}")
     public String historyRemove(@PathVariable("chatId") String chatId) throws IOException {
-        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
+        FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
         try{
             fileBasedChatMemory.clear(chatId);
-            File file = new File(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+chatId);
+            File file = new File(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),chatId).toString());
             if(file.exists() && file.isDirectory()){
                 //文件存在删除
                 FileUtils.deleteDirectory(file);
@@ -202,7 +203,7 @@ public class ChatController {
                 //设置当前异步线程的登录用户
                 BaseContent.setUser(userLoginDTO);
                 //获取记忆系统
-                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR + "\\" + BaseContent.getUser().getUserName() + "\\chatMemory");
+                FileBasedChatMemory fileBasedChatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
 
                 SSESend.sendEventThink(emitter,"开始获取pdf文档关联内容");
                 //rag问答
@@ -227,14 +228,14 @@ public class ChatController {
 
                 //拼接提示词
                 String userPrompt = """
-                ##根据额外信息回答用户提问，当没有额外信息时，提醒用户没有上传pdf文件
+                ##根据额外信息回答用户提问，当额外信息为null时，提醒用户没有上传pdf文件
                 【用户提问】
                 {userMessage}
                 【额外信息】
                 {ragDocuments}
                 """;
                 PromptTemplate promptTemplate = new PromptTemplate(userPrompt);
-                Prompt prompt = promptTemplate.create(Map.of("role", ChatSystem.CHAT_SYSTEM, "userMessage", userMessage, "ragDocuments", ragContent));
+                Prompt prompt = promptTemplate.create(Map.of("role", ChatSystem.CHAT_SYSTEM, "userMessage", userMessage, "ragDocuments", (ragContent==null||ragContent.isEmpty())?"null":ragContent));
 
                 SimpleChatAgent simpleChatAgent = new SimpleChatAgent(openAiChatModel, allTools);
                 String simpleChat = simpleChatAgent.simpleChat(prompt.getContents(), chatId);

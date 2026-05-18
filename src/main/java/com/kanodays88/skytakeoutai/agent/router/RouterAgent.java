@@ -23,6 +23,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -38,7 +39,7 @@ public class RouterAgent {
     public RouterAgent(OpenAiChatModel model, VectorStore vectorStore, ToolCallback[] allTools, SkillRegistry skillRegistry, SseEmitter sseEmitter) throws IOException {
         this.chatClient = ChatClient.builder(model).defaultAdvisors(new MyLoggerAdvisor()).build();
         this.vectorStore = vectorStore;
-        this.chatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\chatMemory");
+        this.chatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
         this.allTools = allTools;
         this.skillRegistry = skillRegistry;
         this.sseEmitter = sseEmitter;
@@ -113,7 +114,7 @@ public class RouterAgent {
                  JSON格式里的内容不得使用双引号：
                     错误案例："Content":"用户的名字叫"五条五""
                     正确案例："Content":"用户的名字叫五条五"
-                 {format}
+                 具体json格式：{format}
                 """;
 
         String userContent = "用户问题：" + prompt + "\n历史对话：\n" + history;
@@ -168,7 +169,7 @@ public class RouterAgent {
                 选择原则：仅基于技能名称和描述进行语义匹配。
                 【历史会话】：{history}
 
-                输出格式：{format}
+                json输出格式：{format}
                 """;
 
         SkillSelection result = chatClient.prompt()

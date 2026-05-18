@@ -19,6 +19,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,8 +68,8 @@ public class PDFGenerationTool {
         if (fileName == null || fileName.isBlank()) return "Error: File name is required.";
         if (content == null) return "Error: Content cannot be null.";
 
-        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
-        String filePath = fileDir + "/" + fileName;
+        String fileDir = Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),BaseContent.getChatId(),"file").toString();
+        String filePath = Paths.get(fileDir,fileName).toString();
         try {
             FileUtil.mkdir(fileDir);
             try (PdfWriter writer = new PdfWriter(filePath);
@@ -81,7 +82,7 @@ public class PDFGenerationTool {
                 addImages(document, imagePaths, fileDir);
             }
             //生成访问路径
-            String httpUrl = HttpPathUtil.writeHttpUrl("/" + BaseContent.getChatId() + "/file/" + fileName);
+            String httpUrl = HttpPathUtil.writeHttpUrl("/"+BaseContent.getUser().getUserName()+"/" + BaseContent.getChatId() + "/file/" + fileName);
             return "PDF生成成功，访问路径："+httpUrl;
         } catch (Exception e) {
             log.error("Error generating PDF", e);

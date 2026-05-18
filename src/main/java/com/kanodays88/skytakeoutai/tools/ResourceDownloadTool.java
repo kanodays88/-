@@ -9,6 +9,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.nio.file.Paths;
 
 @Component
 public class ResourceDownloadTool {
@@ -16,8 +17,8 @@ public class ResourceDownloadTool {
     @Tool(description = "Download a resource from a given URL")
     public String downloadResource(@ToolParam(description = "URL of the resource to download") String url,
                                    @ToolParam(description = "Name of the file to save the downloaded resource") String fileName) {
-        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
-        String filePath = fileDir + "\\" + fileName;
+        String fileDir = Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),BaseContent.getChatId(),"file").toString();
+        String filePath = Paths.get(fileDir,fileName).toString();
         try {
 
             FileUtil.mkdir(fileDir);

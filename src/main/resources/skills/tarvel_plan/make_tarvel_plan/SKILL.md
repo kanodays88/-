@@ -10,6 +10,7 @@ metadata: {author: dev-team, version: 1.0}
 1. 使用搜索引擎搜索相关内容
 2. 图片内容无需下载，用http的url展示即可
 3. 结合相关内容生成.md文件，如果用户指定要求pdf则生成pdf
+4. 生成的文件一定要把链接展示给用户
 
 
 ## Examples

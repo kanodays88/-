@@ -14,6 +14,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.List;
 
 public class SimpleChatAgent {
@@ -24,7 +25,7 @@ public class SimpleChatAgent {
 
     public SimpleChatAgent(OpenAiChatModel chatModel,ToolCallback[] allTools) throws IOException {
         this.chatClient = ChatClient.builder(chatModel).defaultAdvisors(new MyLoggerAdvisor()).build();
-        this.chatMemory = new FileBasedChatMemory(FileConstant.FILE_SAVE_DIR +"\\"+ BaseContent.getUser().getUserName()+ "\\chatMemory");
+        this.chatMemory = new FileBasedChatMemory(Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),"chatMemory").toString());
         this.allTools = allTools;
     }
 

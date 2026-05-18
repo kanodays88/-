@@ -8,6 +8,8 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Paths;
+
 @Component
 public class FileOperationTool {
 
@@ -20,8 +22,8 @@ public class FileOperationTool {
      */
     @Tool(description = "Read content from a file")
     public String readFile(@ToolParam(description = "Name of the file to read") String fileName) {
-        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
-        String filePath = fileDir + "/" + fileName;
+        String fileDir = Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),BaseContent.getChatId(),"file").toString();
+        String filePath = Paths.get(fileDir,fileName).toString();
         try {
             return FileUtil.readUtf8String(filePath);
         } catch (Exception e) {
@@ -39,14 +41,14 @@ public class FileOperationTool {
     public String writeFile(
             @ToolParam(description = "Name of the file to write") String fileName,
             @ToolParam(description = "Content to write to the file") String content) {
-        String fileDir = FileConstant.FILE_SAVE_DIR +"\\"+BaseContent.getUser().getUserName()+ "\\"+BaseContent.getChatId()+"\\file";
-        String filePath = fileDir + "/" + fileName;
+        String fileDir = Paths.get(FileConstant.FILE_SAVE_DIR,BaseContent.getUser().getUserName(),BaseContent.getChatId(),"file").toString();
+        String filePath = Paths.get(fileDir,fileName).toString();
         try {
 
             FileUtil.mkdir(fileDir);
             FileUtil.writeUtf8String(content, filePath);
             //生成访问路径
-            String httpUrl = HttpPathUtil.writeHttpUrl("/" + BaseContent.getChatId() + "/file/" + fileName);
+            String httpUrl = HttpPathUtil.writeHttpUrl("/"+BaseContent.getUser().getUserName()+"/" + BaseContent.getChatId() + "/file/" + fileName);
             return "File written successfully to: " + httpUrl;
         } catch (Exception e) {
             return "Error writing to file: " + e.getMessage();

@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Set;
 
@@ -26,7 +27,7 @@ public class FileRemoveTask {
     @Autowired
     private VectorStore vectorStore;
 
-    @Scheduled(cron = "0 0 */12 * * ?")
+    @Scheduled(cron = "0 0 */1 * * ?")
     @Async
     public void fileRemove(){
 
@@ -44,8 +45,8 @@ public class FileRemoveTask {
                 String userName = strArr[1];
                 String chatId = strArr[2];
                 //超时，删除该会话
-                File userChatFile = new File(FileConstant.FILE_SAVE_DIR + "\\" + userName + "\\" + chatId);
-                File userChatMemory = new File(FileConstant.FILE_SAVE_DIR + "\\" + userName + "\\chatMemory\\" + chatId + ".kryo");
+                File userChatFile = new File(Paths.get(FileConstant.FILE_SAVE_DIR,userName,chatId).toString());
+                File userChatMemory = new File(Paths.get(FileConstant.FILE_SAVE_DIR,userName,"chatMemory",chatId+".kryo").toString());
                 if(userChatFile.exists()){
                     userChatFile.delete();
                 }
@@ -60,6 +61,11 @@ public class FileRemoveTask {
                 Filter.Expression expression = filter.and(eqUser, eqChatId).build();
                 //上面是我见过最四老冯的写法
                 vectorStore.delete(expression);
+
+                //将缓存也清除
+                stringRedisTemplate.delete(key);
+                stringRedisTemplate.opsForSet().remove("remove:chatMemory",key);
+
             }
         }
     }

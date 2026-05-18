@@ -1,6 +1,8 @@
 package com.kanodays88.skytakeoutai;
 
+import cn.hutool.json.JSONUtil;
 import com.kanodays88.skytakeoutai.advisor.MyLoggerAdvisor;
+import com.kanodays88.skytakeoutai.constant.FileConstant;
 import com.kanodays88.skytakeoutai.entity.Dish;
 import com.kanodays88.skytakeoutai.entity.querys.DishQuery;
 import com.kanodays88.skytakeoutai.entity.querys.OrderQuery;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,9 +38,17 @@ class SkyTakeOutAiApplicationTests {
     @Test
     void contextLoads() {
 
-        ChatClient chatClient = ChatClient.builder(model).defaultAdvisors(new MyLoggerAdvisor()).build();
+//        String jsonStr = JSONUtil.toJsonStr(LocalDateTime.now().plusHours(24 * 3));
+//        System.out.println(jsonStr);
+//        LocalDateTime timeout = JSONUtil.toBean(jsonStr, LocalDateTime.class);
+//        System.out.println(LocalDateTime.now().compareTo(timeout));
 
-        String s = chatClient.prompt("你好").call().content();
+        System.out.println(FileConstant.FILE_SAVE_DIR);
+
+
+//        ChatClient chatClient = ChatClient.builder(model).defaultAdvisors(new MyLoggerAdvisor()).build();
+//
+//        String s = chatClient.prompt("你好").call().content();
 
 
 

@@ -181,6 +181,8 @@ public class OrderTool {
     public OrderVO removeOrder(@ToolParam(description = "删除订单对应的订单号") String orderNumber){
         List<Orders> orders = ordersServiceImpl.query().eq("number", orderNumber).list();
 
+        if(orders == null || orders.isEmpty()) return null;
+
         Long orderId = orders.get(0).getId();
         LambdaUpdateWrapper<OrderDetail> wrapper = new LambdaUpdateWrapper<>();
         List<OrderDetail> orderDetails = orderDetailServiceImpl.query().eq("order_id", orderId).list();

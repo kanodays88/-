@@ -45,7 +45,7 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             //存在，则将user用户信息存放到ThreadLocal
             BaseContent.setUser(userLoginDTO);
             //重新刷新时间
-            stringRedisTemplate.expire("login:user::"+token,60, TimeUnit.MINUTES);
+            stringRedisTemplate.expire("login:user:"+token,60, TimeUnit.MINUTES);
         }
         return true;
     }

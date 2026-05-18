@@ -9,6 +9,8 @@ server:
 spring:
   application:
     name: sky-take-out-AI
+  config:
+    import: classpath:secrets.yaml
 
   redis:
     host: 192.168.74.100
@@ -37,7 +39,7 @@ spring:
         base-url: https://dashscope.aliyuncs.com/compatible-mode
         api-key: ${API_KEY}
         options:
-          model: text-embedding-v2  #向量模型
+          model: text-embedding-v4  #向量模型
           dimensions: 1024   #向量维数
 
   datasource:
